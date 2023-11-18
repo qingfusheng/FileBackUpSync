@@ -3,7 +3,7 @@ import hashlib
 import os
 import pathlib
 import shutil
-
+import logging
 from tqdm import tqdm
 
 
@@ -46,7 +46,7 @@ def calculate_file_hash(file_path, hash_algorithm="sha256"):
 
 
 def compare_file(path1, path2) -> bool():
-    return True if calculate_file_hash(path1) == calculate_file_hash(path2) else False
+    return calculate_file_hash(path1) == calculate_file_hash(path2)
 
 
 def get_modified_file_list(source_files, target_files):
@@ -64,6 +64,7 @@ def get_modified_file_list(source_files, target_files):
     modify_list = []
 
     print("在源目录文件中检索")
+    logger.info("在源目录文件中检索")
     for index in tqdm(range(len(source_files))):
         source_file = source_files[index]
         if source_file in target_files:
@@ -75,14 +76,15 @@ def get_modified_file_list(source_files, target_files):
             modify_list.append([source_file, 2])
 
     print("在目标目录文件中检索")
+    logger.info("在备份目录文件中检索")
     for index in tqdm(range(len(target_files))):
         target_file = target_files[index]
         if target_file not in source_files:
             modify_list.append([target_file, 3])
     sorted_modified_list = sorted(modify_list, key=lambda x: x[1])
-    # with open("modify.txt","w", encoding="utf-8") as f:
-    #     for each in sorted_parent_list:
-    #         f.write(str(each[1])+"\t"+str(each[0])+"\n")
+    with open("modify.txt","w", encoding="utf-8") as f:
+        for each in sorted_modified_list:
+            f.write(str(each[1])+"\t"+str(each[0])+"\n")
     return sorted_modified_list
 
 
@@ -91,6 +93,7 @@ def sync_dir(source_files, target_files):
     delete_list = []
     add_list = []
     print("对修改列表进行遍历")
+    logger.info("对待修改列表进行遍历")
     for index in tqdm(range(len(modified_list))):
         each_item = modified_list[index]
         if each_item[1] == 0:
@@ -112,21 +115,25 @@ def sync_dir(source_files, target_files):
 
     # 移除文件
     print("对文件进行删除操作")
+    logger.info("对文件进行删除操作")
     recycle_path = target_path.parent.joinpath("个人文档备份回收站", datetime.datetime.now().strftime('%F'))
     if not recycle_path.exists():
-        os.mkdir(recycle_path)
+        recycle_path.mkdir(parents=True, exist_ok=True)
     for index in tqdm(range(len(delete_list))):
         _source_file_path = target_path.joinpath(delete_list[index])
         _target_file_path = recycle_path.joinpath(delete_list[index])
         _target_file_path.parent.mkdir(parents=True, exist_ok=True)
-        fp.write("Move from {} to {}\n".format(str(_source_file_path), str(_target_file_path)))
+        logger.info(f"Move from {str(_source_file_path)} to {str(_target_file_path)}")
+        # fp.write("Move from {} to {}\n".format(str(_source_file_path), str(_target_file_path)))
         shutil.move(_source_file_path, _target_file_path)
     print("对文件进行添加操作")
+    logger.info("对文件进行添加操作")
     for index in tqdm(range(len(add_list))):
         _source_file_path = source_path.joinpath(add_list[index])
         _target_file_path = target_path.joinpath(add_list[index])
         _target_file_path.parent.mkdir(parents=True, exist_ok=True)
-        fp.write("Copy from {} to {}\n".format(str(_source_file_path), str(_target_file_path)))
+        logger.info(f"Copy from {str(_source_file_path)} to {str(_target_file_path)}")
+        # fp.write("Copy from {} to {}\n".format(str(_source_file_path), str(_target_file_path)))
         if _target_file_path.exists():
             if _target_file_path.is_dir():
                 _target_file_path.rmdir()
@@ -138,7 +145,13 @@ def sync_dir(source_files, target_files):
 
 
 if __name__ == "__main__":
-    fp = open("log_" + datetime.datetime.now().strftime('%F') + ".txt", "w", encoding="utf-8")
+    # fp = open(f"log_{datetime.datetime.now().strftime('%F')}.txt", "w", encoding="utf-8")
+    # 用于创建日志记录器
+    logger = logging.getLogger(__name__)
+    # 配置日志记录器
+    logging.basicConfig(filename=f"log_{datetime.datetime.now().strftime('%F')}.txt", level=logging.INFO,
+                        format="%(asctime)s - %(levelname)s - %(message)s", encoding="utf-8")
+
     source_path = pathlib.Path(r"E:\个人文档")
     target_path = pathlib.Path(r"I:\Computer_backup\个人文档")
 
@@ -150,10 +163,9 @@ if __name__ == "__main__":
         ignore_dir_paths = f.readlines()
     ignore_dir_paths = [pathlib.Path(each.strip("\n")) for each in ignore_dir_paths]
     with open(ignore_file_pathlib, "r", encoding="utf-8") as f:
-        ignore_file_paths = f.readline()
+        ignore_file_paths = f.readlines()
     ignore_file_paths = [pathlib.Path(each.strip("\n")) for each in ignore_file_paths]
 
     source_path_files = walk(base_root_path=source_path, root_path=source_path, is_source_path=True)
     target_path_files = walk(base_root_path=target_path, root_path=target_path, is_source_path=False)
     sync_dir(source_path_files, target_path_files)
-    fp.close()
