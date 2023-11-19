@@ -2,3 +2,5 @@
 .vscode
 content.txt
 modify.txt
+log.txt
+/log_*.txt
