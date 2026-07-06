@@ -17,3 +17,13 @@ detect_renames = true
 # 小于等于该字节数的文件视为小文件；同一目录达到 count 后报告。
 small_file_size = 65536
 small_file_count = 1000
+
+[sync]
+# size 更快；hash 会在原子替换前校验复制内容。
+verify = "hash"
+retry_max = 3
+retry_delay = 0.5
+
+[runtime]
+reports = ".backup-sync/reports"
+state = ".backup-sync/state"

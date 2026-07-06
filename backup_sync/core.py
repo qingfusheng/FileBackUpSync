@@ -5,12 +5,14 @@ import hashlib
 import logging
 import os
 import shutil
+import time
+import uuid
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Iterable
+from typing import Callable, Iterable
 
 LOGGER = logging.getLogger(__name__)
 
@@ -53,6 +55,32 @@ class Plan:
 
     def count(self, kind: ActionKind) -> int:
         return sum(action.kind == kind for action in self.actions)
+
+
+class VerifyMode(str, Enum):
+    SIZE = "size"
+    HASH = "hash"
+
+
+@dataclass(frozen=True)
+class ActionResult:
+    action: Action
+    success: bool
+    attempts: int
+    error: str | None = None
+
+
+@dataclass(frozen=True)
+class ExecutionResult:
+    results: tuple[ActionResult, ...]
+
+    @property
+    def succeeded(self) -> int:
+        return sum(result.success for result in self.results)
+
+    @property
+    def failed(self) -> int:
+        return len(self.results) - self.succeeded
 
 
 def _matches(path: Path, patterns: Iterable[str]) -> bool:
@@ -177,18 +205,105 @@ def build_plan(source: Snapshot, target: Snapshot, detect_renames: bool = True) 
     return Plan(tuple(sorted(actions, key=action_key)), unchanged)
 
 
-def _archive(path: Path, relative: Path, recycle_root: Path) -> None:
-    if not path.exists():
-        return
+def _archive_destination(relative: Path, recycle_root: Path) -> Path:
     destination = recycle_root / relative
     destination.parent.mkdir(parents=True, exist_ok=True)
     if destination.exists():
         suffix = datetime.now().strftime(".%H%M%S%f")
         destination = destination.with_name(destination.name + suffix)
+    return destination
+
+
+def _archive(path: Path, relative: Path, recycle_root: Path) -> None:
+    if not path.exists():
+        return
+    destination = _archive_destination(relative, recycle_root)
     shutil.move(str(path), str(destination))
 
 
-def execute(plan: Plan, source: Snapshot, target: Snapshot, recycle_root: Path) -> None:
+def _backup_existing(path: Path, relative: Path, recycle_root: Path) -> None:
+    if path.exists():
+        shutil.copy2(path, _archive_destination(relative, recycle_root))
+
+
+def _verify_copy(source: Path, destination: Path, mode: VerifyMode) -> None:
+    if source.stat().st_size != destination.stat().st_size:
+        raise OSError(f"复制校验失败（大小不一致）: {destination}")
+    if mode == VerifyMode.HASH and file_digest(source) != file_digest(destination):
+        raise OSError(f"复制校验失败（SHA-256 不一致）: {destination}")
+
+
+def _atomic_copy(source: Path, destination: Path, mode: VerifyMode) -> Path:
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary = destination.parent / f".{destination.name}.backup-sync-{uuid.uuid4().hex}.tmp"
+    try:
+        before = source.stat()
+        shutil.copy2(source, temporary)
+        _verify_copy(source, temporary, mode)
+        after = source.stat()
+        if (before.st_size, before.st_mtime_ns) != (after.st_size, after.st_mtime_ns):
+            raise OSError(f"源文件在复制过程中发生变化: {source}")
+        return temporary
+    except BaseException:
+        temporary.unlink(missing_ok=True)
+        raise
+
+
+def _execute_action(
+    action: Action,
+    source: Snapshot,
+    target: Snapshot,
+    recycle_root: Path,
+    verify: VerifyMode,
+) -> None:
+    destination = target.root / action.path
+    if action.kind == ActionKind.REMOVE:
+        _archive(destination, action.path, recycle_root)
+    elif action.kind == ActionKind.UPDATE:
+        temporary = _atomic_copy(source.root / action.path, destination, verify)
+        try:
+            _backup_existing(destination, action.path, recycle_root)
+            os.replace(temporary, destination)
+        except BaseException:
+            temporary.unlink(missing_ok=True)
+            raise
+    elif action.kind == ActionKind.RENAME:
+        old = target.root / action.source  # type: ignore[arg-type]
+        if not old.is_file():
+            raise FileNotFoundError(f"rename 源文件不存在: {old}")
+        if file_digest(old) != file_digest(source.root / action.path):
+            raise OSError(f"源文件在计划生成后发生变化，拒绝 rename: {action.path}")
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(old), str(destination))
+    elif action.kind == ActionKind.COPY:
+        temporary = _atomic_copy(source.root / action.path, destination, verify)
+        try:
+            os.replace(temporary, destination)
+        except BaseException:
+            temporary.unlink(missing_ok=True)
+            raise
+    elif action.kind == ActionKind.MKDIR:
+        destination.mkdir(parents=True, exist_ok=True)
+    elif action.kind == ActionKind.RMDIR:
+        try:
+            destination.rmdir()
+        except FileNotFoundError:
+            pass
+        except OSError:
+            if destination.is_dir():
+                raise OSError(f"目录非空，无法清理: {destination}")
+
+
+def execute(
+    plan: Plan,
+    source: Snapshot,
+    target: Snapshot,
+    recycle_root: Path,
+    verify: VerifyMode = VerifyMode.HASH,
+    retry_max: int = 3,
+    retry_delay: float = 0.5,
+    progress_callback: Callable[[ActionResult], None] | None = None,
+) -> ExecutionResult:
     recycle_root.mkdir(parents=True, exist_ok=True)
     # Clear already-empty obsolete directories first. A second pass below handles
     # directories that become empty after file removals or renames.
@@ -198,29 +313,29 @@ def execute(plan: Plan, source: Snapshot, target: Snapshot, recycle_root: Path) 
                 (target.root / action.path).rmdir()
             except (FileNotFoundError, OSError):
                 pass
+    results: list[ActionResult] = []
     for action in plan.actions:
-        destination = target.root / action.path
         detail = f"{action.source} -> {action.path}" if action.source else str(action.path)
         LOGGER.info("%s %s", action.kind.value, detail)
-        if action.kind in (ActionKind.REMOVE, ActionKind.UPDATE):
-            _archive(destination, action.path, recycle_root)
-        if action.kind == ActionKind.RENAME:
-            old = target.root / action.source  # type: ignore[arg-type]
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            shutil.move(str(old), str(destination))
-        elif action.kind in (ActionKind.COPY, ActionKind.UPDATE):
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(source.root / action.path, destination)
-        elif action.kind == ActionKind.MKDIR:
-            destination.mkdir(parents=True, exist_ok=True)
-        elif action.kind == ActionKind.RMDIR:
+        action_result: ActionResult
+        for attempt in range(1, retry_max + 2):
             try:
-                destination.rmdir()
-            except FileNotFoundError:
-                pass
-            except OSError:
-                if destination.is_dir():
-                    LOGGER.warning("目录非空，保留: %s", destination)
+                _execute_action(action, source, target, recycle_root, verify)
+                action_result = ActionResult(action, True, attempt)
+                results.append(action_result)
+                break
+            except OSError as exc:
+                if attempt > retry_max:
+                    LOGGER.error("动作失败 %s: %s", detail, exc)
+                    action_result = ActionResult(action, False, attempt, str(exc))
+                    results.append(action_result)
+                    break
+                delay = retry_delay * (2 ** (attempt - 1))
+                LOGGER.warning("动作失败，%.1fs 后重试（%d/%d）%s: %s", delay, attempt, retry_max, detail, exc)
+                time.sleep(delay)
+        if progress_callback:
+            progress_callback(action_result)
+    return ExecutionResult(tuple(results))
 
 
 def format_size(value: int) -> str:

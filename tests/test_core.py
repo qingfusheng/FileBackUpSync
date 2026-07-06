@@ -1,8 +1,9 @@
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
-from backup_sync.core import ActionKind, build_plan, execute, scan
+from backup_sync.core import ActionKind, VerifyMode, build_plan, execute, scan
 
 
 class SyncTests(unittest.TestCase):
@@ -87,6 +88,59 @@ class SyncTests(unittest.TestCase):
         snapshot = scan(self.source, ignore=("1.tmp",), small_file_size=10)
         self.assertEqual(snapshot.small_file_parents[Path("cache")], 2)
         self.assertNotIn(Path("cache/1.tmp"), snapshot.files)
+
+    def test_failed_update_keeps_existing_backup_and_removes_temporary_file(self):
+        (self.source / "important.txt").write_text("new")
+        (self.target / "important.txt").write_text("old")
+        source, target = self.snapshots()
+        with patch("backup_sync.core._verify_copy", side_effect=OSError("bad copy")):
+            result = execute(
+                build_plan(source, target), source, target, self.recycle,
+                retry_max=0,
+            )
+        self.assertEqual(result.failed, 1)
+        self.assertEqual((self.target / "important.txt").read_text(), "old")
+        self.assertEqual(list(self.target.glob(".*.backup-sync-*.tmp")), [])
+        self.assertFalse((self.recycle / "important.txt").exists())
+
+    def test_copy_retries_and_reports_attempt_count(self):
+        (self.source / "file.txt").write_text("content")
+        source, target = self.snapshots()
+        import backup_sync.core as core
+
+        real_copy = core.shutil.copy2
+        calls = 0
+
+        def flaky_copy(*args, **kwargs):
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                raise OSError("temporary failure")
+            return real_copy(*args, **kwargs)
+
+        with patch("backup_sync.core.shutil.copy2", side_effect=flaky_copy), patch("backup_sync.core.time.sleep"):
+            result = execute(
+                build_plan(source, target), source, target, self.recycle,
+                verify=VerifyMode.HASH, retry_max=2,
+            )
+        self.assertEqual(result.failed, 0)
+        copy_result = next(item for item in result.results if item.action.kind == ActionKind.COPY)
+        self.assertEqual(copy_result.attempts, 2)
+        self.assertEqual((self.target / "file.txt").read_text(), "content")
+
+    def test_atomic_replace_failure_keeps_existing_backup(self):
+        (self.source / "important.txt").write_text("new")
+        (self.target / "important.txt").write_text("old")
+        source, target = self.snapshots()
+        with patch("backup_sync.core.os.replace", side_effect=OSError("replace failed")):
+            result = execute(
+                build_plan(source, target), source, target, self.recycle,
+                retry_max=0,
+            )
+        self.assertEqual(result.failed, 1)
+        self.assertEqual((self.target / "important.txt").read_text(), "old")
+        self.assertEqual((self.recycle / "important.txt").read_text(), "old")
+        self.assertEqual(list(self.target.glob(".*.backup-sync-*.tmp")), [])
 
 
 if __name__ == "__main__":
