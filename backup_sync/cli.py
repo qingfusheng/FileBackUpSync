@@ -9,7 +9,8 @@ from pathlib import Path
 
 from .checkpoint import Checkpoint
 from .config import load_config
-from .core import ActionKind, VerifyMode, build_plan, execute, format_size, scan
+from .core import ActionKind, ActionResult, VerifyMode, build_plan, execute, format_size, scan
+from .progress import ProgressDisplay
 from .reporting import build_report, new_run_id, write_json_atomic
 
 
@@ -45,11 +46,40 @@ def main(argv: list[str] | None = None) -> int:
         except (OSError, ValueError) as exc:
             print(f"配置错误: {exc}", file=sys.stderr)
             return 2
+    progress = ProgressDisplay()
     try:
         config.target.mkdir(parents=True, exist_ok=True)
-        source = scan(config.source, config.ignore, config.small_file_size)
-        target = scan(config.target, (), config.small_file_size)
-        plan = build_plan(source, target, config.detect_renames and not args.no_renames)
+        with progress.scan("扫描源目录") as source_bar:
+
+            def source_progress(_path: Path) -> None:
+                source_bar.update(1)
+
+            source = scan(
+                config.source,
+                config.ignore,
+                config.small_file_size,
+                progress_callback=source_progress,
+            )
+        with progress.scan("扫描目标目录") as target_bar:
+
+            def target_progress(_path: Path) -> None:
+                target_bar.update(1)
+
+            target = scan(
+                config.target,
+                (),
+                config.small_file_size,
+                progress_callback=target_progress,
+            )
+        try:
+            plan = build_plan(
+                source,
+                target,
+                config.detect_renames and not args.no_renames,
+                progress_callback=progress.plan,
+            )
+        finally:
+            progress.close_plan()
     except (OSError, ValueError) as exc:
         print(f"I/O 错误: {exc}", file=sys.stderr)
         return 3
@@ -97,17 +127,28 @@ def main(argv: list[str] | None = None) -> int:
             print(f"无法创建 checkpoint: {exc}", file=sys.stderr)
             return 3
     verify = VerifyMode(config.verify)
+
+    def record_progress(action_result: ActionResult) -> None:
+        # Kept local so checkpoint persistence and UI progress advance together.
+        checkpoint.record(action_result)
+        progress.action_finished(action_result)
+
+    progress.start_execution(len(plan.actions))
     try:
-        result = execute(
-            plan,
-            source,
-            target,
-            recycle,
-            verify=verify,
-            retry_max=config.retry_max,
-            retry_delay=config.retry_delay,
-            progress_callback=checkpoint.record,
-        )
+        try:
+            result = execute(
+                plan,
+                source,
+                target,
+                recycle,
+                verify=verify,
+                retry_max=config.retry_max,
+                retry_delay=config.retry_delay,
+                progress_callback=record_progress,
+                action_started_callback=progress.action_started,
+            )
+        finally:
+            progress.close_execution()
     except OSError as exc:
         print(f"同步已部分执行，但 checkpoint 写入失败: {exc}", file=sys.stderr)
         return 3

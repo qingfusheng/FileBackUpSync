@@ -17,6 +17,9 @@ from pathlib import Path
 
 LOGGER = logging.getLogger(__name__)
 
+ScanProgress = Callable[[Path], None]
+PlanProgress = Callable[[str, int, int, Path | None], None]
+
 
 @dataclass(frozen=True)
 class FileInfo:
@@ -97,6 +100,7 @@ def scan(
     root: Path,
     ignore: Iterable[str] = (),
     small_file_size: int = 64 * 1024,
+    progress_callback: ScanProgress | None = None,
 ) -> Snapshot:
     root = root.expanduser().resolve()
     if not root.is_dir():
@@ -128,6 +132,8 @@ def scan(
             except OSError as exc:
                 raise OSError(f"无法读取文件信息: {absolute}") from exc
             files[relative] = FileInfo(relative, size)
+            if progress_callback:
+                progress_callback(relative)
             if size <= small_file_size:
                 small_file_parents[relative.parent] += 1
     return Snapshot(root, files, frozenset(directories), small_file_parents)
@@ -147,18 +153,28 @@ def _same_file(source: Snapshot, target: Snapshot, relative: Path) -> bool:
     return file_digest(source.root / relative) == file_digest(target.root / relative)
 
 
-def build_plan(source: Snapshot, target: Snapshot, detect_renames: bool = True) -> Plan:
+def build_plan(
+    source: Snapshot,
+    target: Snapshot,
+    detect_renames: bool = True,
+    progress_callback: PlanProgress | None = None,
+) -> Plan:
     source_paths = set(source.files)
     target_paths = set(target.files)
     common = source_paths & target_paths
     unchanged = 0
     actions: list[Action] = []
 
-    for path in sorted(common):
+    common_paths = sorted(common)
+    for index, path in enumerate(common_paths):
+        if progress_callback:
+            progress_callback("比较同路径文件", index, len(common_paths), path)
         if _same_file(source, target, path):
             unchanged += 1
         else:
             actions.append(Action(ActionKind.UPDATE, path, size=source.files[path].size))
+    if progress_callback and common_paths:
+        progress_callback("比较同路径文件", len(common_paths), len(common_paths), None)
 
     additions = source_paths - target_paths
     removals = target_paths - source_paths
@@ -173,18 +189,29 @@ def build_plan(source: Snapshot, target: Snapshot, detect_renames: bool = True) 
         for path in additions:
             new_by_size[source.files[path].size].append(path)
 
-        for size in sorted(old_by_size.keys() & new_by_size.keys()):
+        matching_sizes = sorted(old_by_size.keys() & new_by_size.keys())
+        hash_total = sum(len(old_by_size[size]) + len(new_by_size[size]) for size in matching_sizes)
+        hash_completed = 0
+        for size in matching_sizes:
             old_by_hash: dict[str, list[Path]] = defaultdict(list)
             new_by_hash: dict[str, list[Path]] = defaultdict(list)
             for path in sorted(old_by_size[size]):
+                if progress_callback:
+                    progress_callback("计算 rename 指纹", hash_completed, hash_total, path)
                 old_by_hash[file_digest(target.root / path)].append(path)
+                hash_completed += 1
             for path in sorted(new_by_size[size]):
+                if progress_callback:
+                    progress_callback("计算 rename 指纹", hash_completed, hash_total, path)
                 new_by_hash[file_digest(source.root / path)].append(path)
+                hash_completed += 1
             for digest in sorted(old_by_hash.keys() & new_by_hash.keys()):
                 for old, new in zip(old_by_hash[digest], new_by_hash[digest], strict=False):
                     actions.append(Action(ActionKind.RENAME, new, source=old, size=size))
                     renamed_old.add(old)
                     renamed_new.add(new)
+        if progress_callback and hash_total:
+            progress_callback("计算 rename 指纹", hash_total, hash_total, None)
 
     for path in sorted(additions - renamed_new):
         actions.append(Action(ActionKind.COPY, path, size=source.files[path].size))
@@ -323,6 +350,7 @@ def execute(
     retry_max: int = 3,
     retry_delay: float = 0.5,
     progress_callback: Callable[[ActionResult], None] | None = None,
+    action_started_callback: Callable[[Action], None] | None = None,
 ) -> ExecutionResult:
     recycle_root.mkdir(parents=True, exist_ok=True)
     # Clear already-empty obsolete directories first. A second pass below handles
@@ -334,7 +362,9 @@ def execute(
     results: list[ActionResult] = []
     for action in plan.actions:
         detail = f"{action.source} -> {action.path}" if action.source else str(action.path)
-        LOGGER.info("%s %s", action.kind.value, detail)
+        LOGGER.debug("%s %s", action.kind.value, detail)
+        if action_started_callback:
+            action_started_callback(action)
         action_result: ActionResult
         for attempt in range(1, retry_max + 2):
             try:

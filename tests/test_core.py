@@ -155,6 +155,38 @@ class SyncTests(unittest.TestCase):
         self.assertEqual((self.recycle / "important.txt").read_text(), "old")
         self.assertEqual(list(self.target.glob(".*.backup-sync-*.tmp")), [])
 
+    def test_scan_and_plan_publish_progress(self):
+        (self.source / "same.txt").write_text("same")
+        (self.target / "same.txt").write_text("same")
+        (self.source / "new.txt").write_text("moved")
+        (self.target / "old.txt").write_text("moved")
+        scanned: list[Path] = []
+        source = scan(self.source, progress_callback=scanned.append)
+        target = scan(self.target)
+        events: list[tuple[str, int, int, Path | None]] = []
+        plan = build_plan(source, target, progress_callback=lambda *event: events.append(event))
+
+        self.assertEqual(set(scanned), {Path("same.txt"), Path("new.txt")})
+        self.assertEqual(plan.count(ActionKind.RENAME), 1)
+        self.assertIn(("比较同路径文件", 1, 1, None), events)
+        self.assertIn(("计算 rename 指纹", 2, 2, None), events)
+
+    def test_execute_publishes_started_and_finished_progress(self):
+        (self.source / "file.txt").write_text("content")
+        source, target = self.snapshots()
+        started = []
+        finished = []
+        execute(
+            build_plan(source, target),
+            source,
+            target,
+            self.recycle,
+            action_started_callback=started.append,
+            progress_callback=finished.append,
+        )
+        self.assertEqual([item.kind for item in started], [ActionKind.COPY])
+        self.assertTrue(finished[0].success)
+
 
 if __name__ == "__main__":
     unittest.main()

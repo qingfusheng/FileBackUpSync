@@ -9,7 +9,7 @@
 ![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)
 ![Status](https://img.shields.io/badge/status-active_development-2ea44f)
 [![CI](https://github.com/qingfusheng/FileBackUpSync/actions/workflows/ci.yml/badge.svg)](https://github.com/qingfusheng/FileBackUpSync/actions/workflows/ci.yml)
-![Tests](https://img.shields.io/badge/tests-14_passing-2ea44f)
+![Tests](https://img.shields.io/badge/tests-16_passing-2ea44f)
 
 [快速开始](#快速开始) · [配置说明](#配置说明) · [安全设计](#安全设计) · [路线图](#路线图)
 
@@ -36,6 +36,7 @@
 | ✅ 原子复制与校验 | 临时文件校验成功后才原子替换，失败时不破坏已有备份 |
 | 🔁 重试与恢复 | 单文件指数退避重试，checkpoint 支持中断后重新规划并继续 |
 | 📊 运行报告 | 每次执行生成 `run_id` 和可机器读取的 JSON 摘要 |
+| 📈 全流程进度 | 扫描、内容比较、rename 指纹计算和执行阶段均显示实时进度 |
 | ⚙️ 无路径硬编码 | 源、目标、回收目录和扫描策略统一由 TOML 配置 |
 | 🛡️ 边界保护 | 拒绝互相嵌套的源/目标路径，跳过符号链接，保留异常非空目录 |
 
@@ -213,6 +214,12 @@ python3 main.py --apply --resume 20260706-204414-c28d631d
 
 工具只提供提示，不会自动忽略文件；是否排除由你决定。
 
+## 进度显示
+
+在交互式终端运行时，工具会分别显示源扫描、目标扫描、内容比较、rename 指纹计算和执行进度。扫描阶段会显示已经发现的文件数与速度；已知任务总量的阶段会显示百分比、预计剩余时间和当前路径。
+
+输出重定向到文件或在 CI 中运行时，动态进度条会自动关闭，JSON 报告和普通日志不受影响。
+
 ## 安全设计
 
 - **默认不写入：** 不带 `--apply` 时永远只预览。
@@ -258,6 +265,7 @@ GitHub Actions 会在 Python 3.11、3.12 和 3.13 上运行测试，并要求核
 - ignore 与小文件热点统计
 - 原子替换失败保护与复制重试
 - JSON 报告、checkpoint 和恢复流程
+- 扫描、计划和执行进度回调
 
 项目入口：
 
