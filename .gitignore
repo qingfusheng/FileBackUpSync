@@ -4,3 +4,8 @@ content.txt
 modify.txt
 log.txt
 /log_*.txt
+backup.toml
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/

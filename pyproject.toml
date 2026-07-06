@@ -1,0 +1,15 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "file-backup-sync"
+version = "1.0.0"
+description = "Safe one-way incremental directory backup"
+requires-python = ">=3.11"
+
+[project.scripts]
+backup-sync = "backup_sync.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["backup_sync*"]

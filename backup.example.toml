@@ -1,0 +1,19 @@
+[paths]
+source = "/path/to/source"
+target = "/path/to/backup"
+# recycle = "/path/to/recycle-bin"
+
+[ignore]
+# 路径相对于源目录；支持 glob。目录名规则会匹配任意层级。
+patterns = [
+  ".DS_Store",
+  "__pycache__",
+  "*.tmp",
+  "node_modules",
+]
+
+[scan]
+detect_renames = true
+# 小于等于该字节数的文件视为小文件；同一目录达到 count 后报告。
+small_file_size = 65536
+small_file_count = 1000
