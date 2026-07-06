@@ -20,6 +20,12 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--apply", action="store_true", help="执行计划；默认只预览")
     result.add_argument("--no-renames", action="store_true", help="禁用内容相同文件的 rename 检测")
     result.add_argument("--resume", metavar="RUN_ID", help="恢复未完成的运行（仍需 --apply）")
+    result.add_argument(
+        "--progress",
+        choices=("auto", "always", "never"),
+        default="auto",
+        help="进度条显示方式；默认自动识别终端和 PyCharm",
+    )
     result.add_argument("--verbose", action="store_true")
     return result
 
@@ -46,7 +52,7 @@ def main(argv: list[str] | None = None) -> int:
         except (OSError, ValueError) as exc:
             print(f"配置错误: {exc}", file=sys.stderr)
             return 2
-    progress = ProgressDisplay()
+    progress = ProgressDisplay(args.progress)
     try:
         config.target.mkdir(parents=True, exist_ok=True)
         with progress.scan("扫描源目录") as source_bar:

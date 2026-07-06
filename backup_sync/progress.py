@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -12,8 +13,11 @@ from .core import Action, ActionResult
 class ProgressDisplay:
     """Terminal progress display that stays silent when stderr is not interactive."""
 
-    def __init__(self) -> None:
-        self.enabled = sys.stderr.isatty()
+    def __init__(self, mode: str = "auto") -> None:
+        if mode not in {"auto", "always", "never"}:
+            raise ValueError(f"无效的进度显示模式: {mode}")
+        is_pycharm = os.environ.get("PYCHARM_HOSTED") == "1"
+        self.enabled = mode == "always" or (mode == "auto" and (sys.stderr.isatty() or is_pycharm))
         self._plan_bar: tqdm[Any] | None = None
         self._plan_stage: str | None = None
         self._execution_bar: tqdm[Any] | None = None

@@ -9,7 +9,7 @@
 ![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)
 ![Status](https://img.shields.io/badge/status-active_development-2ea44f)
 [![CI](https://github.com/qingfusheng/FileBackUpSync/actions/workflows/ci.yml/badge.svg)](https://github.com/qingfusheng/FileBackUpSync/actions/workflows/ci.yml)
-![Tests](https://img.shields.io/badge/tests-16_passing-2ea44f)
+![Tests](https://img.shields.io/badge/tests-19_passing-2ea44f)
 
 [快速开始](#快速开始) · [配置说明](#配置说明) · [安全设计](#安全设计) · [路线图](#路线图)
 
@@ -172,6 +172,7 @@ state = ".backup-sync/state"
 --apply         执行同步计划；不传时只预览
 --no-renames    本次运行禁用 rename 检测
 --resume RUN_ID 恢复未成功的运行，必须同时使用 --apply
+--progress MODE 进度显示模式：auto、always 或 never
 --verbose       输出更详细的日志
 ```
 
@@ -216,7 +217,13 @@ python3 main.py --apply --resume 20260706-204414-c28d631d
 
 ## 进度显示
 
-在交互式终端运行时，工具会分别显示源扫描、目标扫描、内容比较、rename 指纹计算和执行进度。扫描阶段会显示已经发现的文件数与速度；已知任务总量的阶段会显示百分比、预计剩余时间和当前路径。
+在交互式终端或 PyCharm Run Console 中运行时，工具会分别显示源扫描、目标扫描、内容比较、rename 指纹计算和执行进度。扫描阶段会显示已经发现的文件数与速度；已知任务总量的阶段会显示百分比、预计剩余时间和当前路径。
+
+如果 IDE 没有被自动识别，可以强制开启：
+
+```bash
+python3 main.py --progress always
+```
 
 输出重定向到文件或在 CI 中运行时，动态进度条会自动关闭，JSON 报告和普通日志不受影响。
 
