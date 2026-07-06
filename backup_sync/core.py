@@ -100,7 +100,7 @@ def scan(
 ) -> Snapshot:
     root = root.expanduser().resolve()
     if not root.is_dir():
-        raise ValueError(f"目录不存在或不可读: {root}")
+        raise ValueError(f"目录不存在或不可读: {str(root)!r}")
 
     patterns = tuple(p.strip() for p in ignore if p.strip() and not p.lstrip().startswith("#"))
     files: dict[Path, FileInfo] = {}
