@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import os
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -30,8 +30,8 @@ def build_report(
         "schema_version": 1,
         "run_id": run_id,
         "status": "success" if execution.failed == 0 else "partial_failure",
-        "started_at": started_at.astimezone(timezone.utc).isoformat(),
-        "finished_at": finished_at.astimezone(timezone.utc).isoformat(),
+        "started_at": started_at.astimezone(UTC).isoformat(),
+        "finished_at": finished_at.astimezone(UTC).isoformat(),
         "duration_seconds": round((finished_at - started_at).total_seconds(), 3),
         "source": str(source.root),
         "target": str(target.root),

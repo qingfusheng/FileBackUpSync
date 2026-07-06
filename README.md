@@ -8,7 +8,8 @@
 
 ![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)
 ![Status](https://img.shields.io/badge/status-active_development-2ea44f)
-![Tests](https://img.shields.io/badge/tests-7_passing-2ea44f)
+[![CI](https://github.com/qingfusheng/FileBackUpSync/actions/workflows/ci.yml/badge.svg)](https://github.com/qingfusheng/FileBackUpSync/actions/workflows/ci.yml)
+![Tests](https://img.shields.io/badge/tests-14_passing-2ea44f)
 
 [快速开始](#快速开始) · [配置说明](#配置说明) · [安全设计](#安全设计) · [路线图](#路线图)
 
@@ -32,6 +33,9 @@
 | 📁 完整目录对齐 | 创建源目录中的空目录，并自底向上清理目标残留空目录 |
 | 🧹 灵活忽略 | 使用 glob 排除缓存、临时文件和不需要备份的目录 |
 | 🧩 小文件预检 | 扫描时定位小文件热点，帮助发现低价值、高开销目录 |
+| ✅ 原子复制与校验 | 临时文件校验成功后才原子替换，失败时不破坏已有备份 |
+| 🔁 重试与恢复 | 单文件指数退避重试，checkpoint 支持中断后重新规划并继续 |
+| 📊 运行报告 | 每次执行生成 `run_id` 和可机器读取的 JSON 摘要 |
 | ⚙️ 无路径硬编码 | 源、目标、回收目录和扫描策略统一由 TOML 配置 |
 | 🛡️ 边界保护 | 拒绝互相嵌套的源/目标路径，跳过符号链接，保留异常非空目录 |
 
@@ -135,6 +139,15 @@ patterns = [
 detect_renames = true
 small_file_size = 65536
 small_file_count = 1000
+
+[sync]
+verify = "hash"       # size | hash
+retry_max = 3
+retry_delay = 0.5
+
+[runtime]
+reports = ".backup-sync/reports"
+state = ".backup-sync/state"
 ```
 
 ### 忽略规则
@@ -157,8 +170,37 @@ small_file_count = 1000
 --config PATH   指定配置文件，默认 backup.toml
 --apply         执行同步计划；不传时只预览
 --no-renames    本次运行禁用 rename 检测
+--resume RUN_ID 恢复未成功的运行，必须同时使用 --apply
 --verbose       输出更详细的日志
 ```
+
+### 校验与失败重试
+
+`sync.verify` 控制复制后的校验方式：
+
+- `hash`：默认值，对源文件和临时副本执行 SHA-256 校验，可靠性优先。
+- `size`：仅校验字节数，适合更看重速度且介质可靠的场景。
+
+每个失败动作最多重试 `retry_max` 次，等待时间从 `retry_delay` 开始指数增长。单个文件最终失败不会阻断其他动作；运行返回部分失败状态并写入报告。
+
+### 中断恢复
+
+执行时会在 `.backup-sync/state/<run_id>.json` 逐动作保存 checkpoint。恢复时仍然要求显式确认：
+
+```bash
+python3 main.py --apply --resume 20260706-204414-c28d631d
+```
+
+恢复操作会重新扫描源目录和当前目标目录，再生成剩余计划。这能避免中断期间源文件变化后继续执行过期计划。对应报告保存在 `.backup-sync/reports/<run_id>.json`。
+
+退出码：
+
+| 退出码 | 含义 |
+| --- | --- |
+| `0` | 成功，或预览完成 |
+| `1` | 部分动作最终失败，可使用 run_id 恢复 |
+| `2` | 配置或命令参数错误 |
+| `3` | 文件系统、checkpoint 或报告 I/O 错误 |
 
 ## 小文件热点检测
 
@@ -174,7 +216,9 @@ small_file_count = 1000
 ## 安全设计
 
 - **默认不写入：** 不带 `--apply` 时永远只预览。
-- **旧内容可找回：** 修改和删除的文件保存在 `recycle/YYYY-MM-DD_HHMMSS/`。
+- **旧内容可找回：** 修改和删除的文件保存在带唯一 `run_id` 的回收目录中。
+- **原子替换：** 新内容先复制到目标同目录临时文件，通过校验后才替换正式文件。
+- **更新失败不破坏旧备份：** 更新时先保留旧版本副本，原子替换失败仍维持原目标文件。
 - **内容一致才 rename：** 候选文件先按大小筛选，再用 SHA-256 确认。
 - **路径隔离：** 源、目标不能相同或互相包含；回收目录不能位于二者内部。
 - **保守处理异常目录：** 计划清理的目录若仍非空，会记录警告并保留。
@@ -191,6 +235,19 @@ small_file_count = 1000
 python3 -m unittest discover -v
 ```
 
+运行全部质量门禁：
+
+```bash
+python3 -m pip install -e ".[dev]"
+ruff check .
+ruff format --check .
+mypy
+coverage run -m unittest discover -v
+coverage report
+```
+
+GitHub Actions 会在 Python 3.11、3.12 和 3.13 上运行测试，并要求核心代码覆盖率不低于 80%。
+
 当前回归测试覆盖：
 
 - 文件新增、修改与旧版本回收
@@ -199,6 +256,8 @@ python3 -m unittest discover -v
 - 空目录同步
 - 文件/目录类型互换
 - ignore 与小文件热点统计
+- 原子替换失败保护与复制重试
+- JSON 报告、checkpoint 和恢复流程
 
 项目入口：
 
@@ -207,6 +266,8 @@ main.py                 兼容运行入口
 backup_sync/cli.py      命令行和计划展示
 backup_sync/config.py   TOML 配置读取与路径校验
 backup_sync/core.py     扫描、规划和执行核心
+backup_sync/checkpoint.py  运行状态与恢复信息
+backup_sync/reporting.py   JSON 运行报告
 tests/                  回归测试
 ```
 
@@ -216,15 +277,16 @@ tests/                  回归测试
 - [x] 内容级 rename 检测
 - [x] 回收站与目录对齐
 - [x] 小文件热点预检
-- [ ] 原子复制与复制后校验
-- [ ] 失败重试、运行摘要和结构化日志
-- [ ] checkpoint 与中断恢复
-- [ ] ruff、mypy、覆盖率和 CI
+- [x] 原子复制与复制后校验
+- [x] 失败重试、run_id 和 JSON 摘要
+- [x] checkpoint 与中断恢复
+- [x] ruff、mypy、覆盖率和 CI
+- [ ] 独立 JSON 日志与报告查询命令
 - [ ] wheel / sdist 发布
 
 ## 当前状态
 
-项目正在进行工程化改造。现阶段适合在检查预览后用于个人备份；原子写入、断点恢复和稳定版发布仍在路线图中。
+项目已具备安全预览、原子复制、内容校验、失败重试和中断恢复等核心可靠性能力。目前继续完善日志查询、跨平台真实介质测试和稳定版发布流程。
 
 ---
 

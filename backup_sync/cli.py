@@ -54,7 +54,11 @@ def main(argv: list[str] | None = None) -> int:
         print(f"I/O 错误: {exc}", file=sys.stderr)
         return 3
 
-    hotspots = [(path, count) for path, count in source.small_file_parents.items() if count >= config.small_file_count]
+    hotspots = [
+        (path, count)
+        for path, count in source.small_file_parents.items()
+        if count >= config.small_file_count
+    ]
     if hotspots:
         print("\n小文件热点（可考虑加入 ignore.patterns）：")
         for path, count in sorted(hotspots, key=lambda item: (-item[1], str(item[0])))[:20]:
@@ -62,7 +66,8 @@ def main(argv: list[str] | None = None) -> int:
 
     print(f"\n扫描: 源 {len(source.files)} 个文件，目标 {len(target.files)} 个文件")
     print(
-        "计划: " + ", ".join(f"{kind.value}={plan.count(kind)}" for kind in ActionKind)
+        "计划: "
+        + ", ".join(f"{kind.value}={plan.count(kind)}" for kind in ActionKind)
         + f", unchanged={plan.unchanged}"
     )
     for action in plan.actions:
@@ -72,7 +77,7 @@ def main(argv: list[str] | None = None) -> int:
     if not args.apply:
         print("\n当前为预览模式；确认后使用 --apply 执行。")
         return 0
-    if not plan.actions:
+    if not plan.actions and not args.resume:
         print("目标目录已经与源目录一致。")
         return 0
     run_id = args.resume or new_run_id()
@@ -81,7 +86,12 @@ def main(argv: list[str] | None = None) -> int:
     if checkpoint is None:
         try:
             checkpoint = Checkpoint.create(
-                config.state, run_id, source.root, target.root, recycle, started_at,
+                config.state,
+                run_id,
+                source.root,
+                target.root,
+                recycle,
+                started_at,
             )
         except OSError as exc:
             print(f"无法创建 checkpoint: {exc}", file=sys.stderr)
@@ -89,8 +99,13 @@ def main(argv: list[str] | None = None) -> int:
     verify = VerifyMode(config.verify)
     try:
         result = execute(
-            plan, source, target, recycle,
-            verify=verify, retry_max=config.retry_max, retry_delay=config.retry_delay,
+            plan,
+            source,
+            target,
+            recycle,
+            verify=verify,
+            retry_max=config.retry_max,
+            retry_delay=config.retry_delay,
             progress_callback=checkpoint.record,
         )
     except OSError as exc:
@@ -99,7 +114,15 @@ def main(argv: list[str] | None = None) -> int:
     finished_at = datetime.now().astimezone()
     report_path = config.reports / f"{run_id}.json"
     report = build_report(
-        run_id, started_at, finished_at, source, target, plan, result, verify, recycle,
+        run_id,
+        started_at,
+        finished_at,
+        source,
+        target,
+        plan,
+        result,
+        verify,
+        recycle,
     )
     try:
         write_json_atomic(report_path, report)
@@ -107,10 +130,7 @@ def main(argv: list[str] | None = None) -> int:
     except OSError as exc:
         print(f"同步已执行，但报告写入失败: {exc}", file=sys.stderr)
         return 3
-    print(
-        f"运行 {run_id} 完成：成功 {result.succeeded}，失败 {result.failed}；"
-        f"报告: {report_path}"
-    )
+    print(f"运行 {run_id} 完成：成功 {result.succeeded}，失败 {result.failed}；报告: {report_path}")
     if recycle.exists() and any(recycle.iterdir()):
         print(f"替换/删除的文件保存在: {recycle}")
     return 1 if result.failed else 0

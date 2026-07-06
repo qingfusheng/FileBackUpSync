@@ -42,7 +42,7 @@ def load_config(path: Path) -> Config:
         raise ValueError("源目录和目标目录不能相同或互相包含")
     recycle_value = paths.get("recycle", str(target.parent / ".backup-sync-trash" / target.name))
     recycle = resolve(recycle_value)
-    if recycle == source or source in recycle.parents or recycle == target or target in recycle.parents:
+    if recycle in (source, target) or source in recycle.parents or target in recycle.parents:
         raise ValueError("回收目录不能等于或位于源目录/目标目录内部")
     verify = str(sync.get("verify", "hash"))
     if verify not in ("size", "hash"):

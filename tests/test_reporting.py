@@ -23,8 +23,15 @@ class ReportingTests(unittest.TestCase):
             result = execute(plan, source, target, root / "recycle")
             finished = datetime.now().astimezone()
             report = build_report(
-                "run-123", started, finished, source, target, plan, result,
-                VerifyMode.HASH, root / "recycle",
+                "run-123",
+                started,
+                finished,
+                source,
+                target,
+                plan,
+                result,
+                VerifyMode.HASH,
+                root / "recycle",
             )
             output = root / "reports/run-123.json"
             write_json_atomic(output, report)

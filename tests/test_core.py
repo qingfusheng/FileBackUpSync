@@ -95,7 +95,10 @@ class SyncTests(unittest.TestCase):
         source, target = self.snapshots()
         with patch("backup_sync.core._verify_copy", side_effect=OSError("bad copy")):
             result = execute(
-                build_plan(source, target), source, target, self.recycle,
+                build_plan(source, target),
+                source,
+                target,
+                self.recycle,
                 retry_max=0,
             )
         self.assertEqual(result.failed, 1)
@@ -118,10 +121,17 @@ class SyncTests(unittest.TestCase):
                 raise OSError("temporary failure")
             return real_copy(*args, **kwargs)
 
-        with patch("backup_sync.core.shutil.copy2", side_effect=flaky_copy), patch("backup_sync.core.time.sleep"):
+        with (
+            patch("backup_sync.core.shutil.copy2", side_effect=flaky_copy),
+            patch("backup_sync.core.time.sleep"),
+        ):
             result = execute(
-                build_plan(source, target), source, target, self.recycle,
-                verify=VerifyMode.HASH, retry_max=2,
+                build_plan(source, target),
+                source,
+                target,
+                self.recycle,
+                verify=VerifyMode.HASH,
+                retry_max=2,
             )
         self.assertEqual(result.failed, 0)
         copy_result = next(item for item in result.results if item.action.kind == ActionKind.COPY)
@@ -134,7 +144,10 @@ class SyncTests(unittest.TestCase):
         source, target = self.snapshots()
         with patch("backup_sync.core.os.replace", side_effect=OSError("replace failed")):
             result = execute(
-                build_plan(source, target), source, target, self.recycle,
+                build_plan(source, target),
+                source,
+                target,
+                self.recycle,
                 retry_max=0,
             )
         self.assertEqual(result.failed, 1)

@@ -8,11 +8,12 @@ import shutil
 import time
 import uuid
 from collections import Counter, defaultdict
+from collections.abc import Callable, Iterable
+from contextlib import suppress
 from dataclasses import dataclass
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
-from typing import Callable, Iterable
 
 LOGGER = logging.getLogger(__name__)
 
@@ -31,7 +32,7 @@ class Snapshot:
     small_file_parents: Counter[Path]
 
 
-class ActionKind(str, Enum):
+class ActionKind(StrEnum):
     COPY = "copy"
     UPDATE = "update"
     RENAME = "rename"
@@ -57,7 +58,7 @@ class Plan:
         return sum(action.kind == kind for action in self.actions)
 
 
-class VerifyMode(str, Enum):
+class VerifyMode(StrEnum):
     SIZE = "size"
     HASH = "hash"
 
@@ -110,7 +111,8 @@ def scan(
         current_path = Path(current)
         relative_dir = current_path.relative_to(root)
         dirnames[:] = sorted(
-            name for name in dirnames
+            name
+            for name in dirnames
             if not _matches(relative_dir / name, patterns)
             and not (current_path / name).is_symlink()
         )
@@ -179,7 +181,7 @@ def build_plan(source: Snapshot, target: Snapshot, detect_renames: bool = True) 
             for path in sorted(new_by_size[size]):
                 new_by_hash[file_digest(source.root / path)].append(path)
             for digest in sorted(old_by_hash.keys() & new_by_hash.keys()):
-                for old, new in zip(old_by_hash[digest], new_by_hash[digest]):
+                for old, new in zip(old_by_hash[digest], new_by_hash[digest], strict=False):
                     actions.append(Action(ActionKind.RENAME, new, source=old, size=size))
                     renamed_old.add(old)
                     renamed_new.add(new)
@@ -189,17 +191,33 @@ def build_plan(source: Snapshot, target: Snapshot, detect_renames: bool = True) 
     for path in sorted(removals - renamed_old):
         actions.append(Action(ActionKind.REMOVE, path, size=target.files[path].size))
 
-    for path in sorted(source.directories - target.directories, key=lambda p: (len(p.parts), str(p))):
+    new_directories = sorted(
+        source.directories - target.directories,
+        key=lambda p: (len(p.parts), str(p)),
+    )
+    for path in new_directories:
         actions.append(Action(ActionKind.MKDIR, path))
-    for path in sorted(target.directories - source.directories, key=lambda p: (-len(p.parts), str(p))):
+    old_directories = sorted(
+        target.directories - source.directories,
+        key=lambda p: (-len(p.parts), str(p)),
+    )
+    for path in old_directories:
         actions.append(Action(ActionKind.RMDIR, path))
 
     order = {
-        ActionKind.REMOVE: 0, ActionKind.UPDATE: 1, ActionKind.RENAME: 2,
-        ActionKind.MKDIR: 3, ActionKind.COPY: 4, ActionKind.RMDIR: 5,
+        ActionKind.REMOVE: 0,
+        ActionKind.UPDATE: 1,
+        ActionKind.RENAME: 2,
+        ActionKind.MKDIR: 3,
+        ActionKind.COPY: 4,
+        ActionKind.RMDIR: 5,
     }
+
     def action_key(action: Action) -> tuple[int, int, str]:
-        depth = -len(action.path.parts) if action.kind == ActionKind.RMDIR else len(action.path.parts)
+        if action.kind == ActionKind.RMDIR:
+            depth = -len(action.path.parts)
+        else:
+            depth = len(action.path.parts)
         return order[action.kind], depth, str(action.path)
 
     return Plan(tuple(sorted(actions, key=action_key)), unchanged)
@@ -268,7 +286,9 @@ def _execute_action(
             temporary.unlink(missing_ok=True)
             raise
     elif action.kind == ActionKind.RENAME:
-        old = target.root / action.source  # type: ignore[arg-type]
+        if action.source is None:
+            raise ValueError("rename 动作缺少原路径")
+        old = target.root / action.source
         if not old.is_file():
             raise FileNotFoundError(f"rename 源文件不存在: {old}")
         if file_digest(old) != file_digest(source.root / action.path):
@@ -289,9 +309,9 @@ def _execute_action(
             destination.rmdir()
         except FileNotFoundError:
             pass
-        except OSError:
+        except OSError as exc:
             if destination.is_dir():
-                raise OSError(f"目录非空，无法清理: {destination}")
+                raise OSError(f"目录非空，无法清理: {destination}") from exc
 
 
 def execute(
@@ -309,10 +329,8 @@ def execute(
     # directories that become empty after file removals or renames.
     for action in plan.actions:
         if action.kind == ActionKind.RMDIR:
-            try:
+            with suppress(FileNotFoundError, OSError):
                 (target.root / action.path).rmdir()
-            except (FileNotFoundError, OSError):
-                pass
     results: list[ActionResult] = []
     for action in plan.actions:
         detail = f"{action.source} -> {action.path}" if action.source else str(action.path)
@@ -331,7 +349,14 @@ def execute(
                     results.append(action_result)
                     break
                 delay = retry_delay * (2 ** (attempt - 1))
-                LOGGER.warning("动作失败，%.1fs 后重试（%d/%d）%s: %s", delay, attempt, retry_max, detail, exc)
+                LOGGER.warning(
+                    "动作失败，%.1fs 后重试（%d/%d）%s: %s",
+                    delay,
+                    attempt,
+                    retry_max,
+                    detail,
+                    exc,
+                )
                 time.sleep(delay)
         if progress_callback:
             progress_callback(action_result)

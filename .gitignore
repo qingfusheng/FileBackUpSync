@@ -10,3 +10,5 @@ __pycache__/
 .pytest_cache/
 *.egg-info/
 .backup-sync/
+.coverage
+htmlcov/

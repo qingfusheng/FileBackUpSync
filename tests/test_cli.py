@@ -53,9 +53,15 @@ class CliTests(unittest.TestCase):
         run_id = state_path.stem
         self.assertEqual(json.loads(state_path.read_text())["status"], "partial_failure")
 
-        second_code = main([
-            "--config", str(self.config), "--apply", "--resume", run_id,
-        ])
+        second_code = main(
+            [
+                "--config",
+                str(self.config),
+                "--apply",
+                "--resume",
+                run_id,
+            ]
+        )
         self.assertEqual(second_code, 0)
         self.assertEqual((self.target / "file.txt").read_text(), "content")
         self.assertEqual(json.loads(state_path.read_text())["status"], "success")
