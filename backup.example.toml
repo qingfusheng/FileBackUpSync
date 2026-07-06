@@ -14,6 +14,8 @@ patterns = [
 
 [scan]
 detect_renames = true
+# smart: 大小+修改时间相同则跳过 hash；hash: 每次完整读取两边文件。
+compare = "smart"
 # 小于等于该字节数的文件视为小文件；同一目录达到 count 后报告。
 small_file_size = 65536
 small_file_count = 1000

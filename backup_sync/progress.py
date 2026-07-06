@@ -39,10 +39,9 @@ class ProgressDisplay:
             self._plan_bar = tqdm(total=total, desc=stage, unit=" 文件", dynamic_ncols=True)
         if self._plan_bar is None:
             return
-        self._plan_bar.n = completed
         if path is not None:
             self._plan_bar.set_postfix_str(_short_path(path), refresh=False)
-        self._plan_bar.refresh()
+        self._plan_bar.update(completed - self._plan_bar.n)
 
     def close_plan(self) -> None:
         if self._plan_bar is not None:

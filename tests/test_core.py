@@ -1,3 +1,4 @@
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -186,6 +187,31 @@ class SyncTests(unittest.TestCase):
         )
         self.assertEqual([item.kind for item in started], [ActionKind.COPY])
         self.assertTrue(finished[0].success)
+
+    def test_smart_compare_skips_hash_when_size_and_mtime_match(self):
+        source_file = self.source / "same.txt"
+        target_file = self.target / "same.txt"
+        source_file.write_text("content")
+        target_file.write_text("content")
+        source_stat = source_file.stat()
+        os.utime(target_file, ns=(source_stat.st_atime_ns, source_stat.st_mtime_ns))
+        source, target = self.snapshots()
+
+        with patch("backup_sync.core.file_digest", side_effect=AssertionError("hash called")):
+            plan = build_plan(source, target, compare_mode="smart")
+        self.assertEqual(plan.unchanged, 1)
+
+    def test_hash_compare_detects_same_metadata_but_different_content(self):
+        source_file = self.source / "same.txt"
+        target_file = self.target / "same.txt"
+        source_file.write_text("AAAA")
+        target_file.write_text("BBBB")
+        source_stat = source_file.stat()
+        os.utime(target_file, ns=(source_stat.st_atime_ns, source_stat.st_mtime_ns))
+        source, target = self.snapshots()
+
+        plan = build_plan(source, target, compare_mode="hash")
+        self.assertEqual(plan.count(ActionKind.UPDATE), 1)
 
 
 if __name__ == "__main__":

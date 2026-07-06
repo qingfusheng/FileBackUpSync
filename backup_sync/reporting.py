@@ -25,6 +25,7 @@ def build_report(
     execution: ExecutionResult,
     verify: VerifyMode,
     recycle: Path,
+    compare: str = "smart",
 ) -> dict[str, Any]:
     return {
         "schema_version": 1,
@@ -37,6 +38,7 @@ def build_report(
         "target": str(target.root),
         "recycle": str(recycle),
         "verify": verify.value,
+        "compare": compare,
         "scan": {"source_files": len(source.files), "target_files": len(target.files)},
         "summary": {
             "planned": len(plan.actions),

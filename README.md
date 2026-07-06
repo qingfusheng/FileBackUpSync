@@ -9,7 +9,7 @@
 ![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)
 ![Status](https://img.shields.io/badge/status-active_development-2ea44f)
 [![CI](https://github.com/qingfusheng/FileBackUpSync/actions/workflows/ci.yml/badge.svg)](https://github.com/qingfusheng/FileBackUpSync/actions/workflows/ci.yml)
-![Tests](https://img.shields.io/badge/tests-19_passing-2ea44f)
+![Tests](https://img.shields.io/badge/tests-21_passing-2ea44f)
 
 [快速开始](#快速开始) · [配置说明](#配置说明) · [安全设计](#安全设计) · [路线图](#路线图)
 
@@ -138,6 +138,7 @@ patterns = [
 
 [scan]
 detect_renames = true
+compare = "smart"      # smart | hash
 small_file_size = 65536
 small_file_count = 1000
 
@@ -171,6 +172,7 @@ state = ".backup-sync/state"
 --config PATH   指定配置文件，默认 backup.toml
 --apply         执行同步计划；不传时只预览
 --no-renames    本次运行禁用 rename 检测
+--compare MODE  同路径文件使用 smart 或 hash 比较
 --resume RUN_ID 恢复未成功的运行，必须同时使用 --apply
 --progress MODE 进度显示模式：auto、always 或 never
 --verbose       输出更详细的日志
@@ -184,6 +186,21 @@ state = ".backup-sync/state"
 - `size`：仅校验字节数，适合更看重速度且介质可靠的场景。
 
 每个失败动作最多重试 `retry_max` 次，等待时间从 `retry_delay` 开始指数增长。单个文件最终失败不会阻断其他动作；运行返回部分失败状态并写入报告。
+
+### 扫描与比较性能
+
+`scan.compare` 控制已有同路径文件的比较策略：
+
+- `smart`：默认值。大小和纳秒级修改时间一致时直接跳过；只有元数据变化时才读取两边内容计算 SHA-256。这是日常增量备份推荐模式。
+- `hash`：每次完整读取两边文件并计算 SHA-256，速度较慢，适合定期审计或怀疑文件时间戳不可信的场景。
+
+临时执行一次完整审计：
+
+```bash
+python3 main.py --compare hash
+```
+
+目录遍历使用 `os.scandir()` 复用文件系统返回的元数据，减少外置盘和 NTFS 驱动上的额外查询。外置机械盘通常受随机读取和 USB 延迟限制，因此扫描时 CPU 不会跑满。
 
 ### 中断恢复
 

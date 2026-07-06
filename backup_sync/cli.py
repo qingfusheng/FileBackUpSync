@@ -19,6 +19,11 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--config", type=Path, default=Path("backup.toml"), help="TOML 配置文件")
     result.add_argument("--apply", action="store_true", help="执行计划；默认只预览")
     result.add_argument("--no-renames", action="store_true", help="禁用内容相同文件的 rename 检测")
+    result.add_argument(
+        "--compare",
+        choices=("smart", "hash"),
+        help="同路径文件比较方式；默认读取配置",
+    )
     result.add_argument("--resume", metavar="RUN_ID", help="恢复未完成的运行（仍需 --apply）")
     result.add_argument(
         "--progress",
@@ -83,6 +88,7 @@ def main(argv: list[str] | None = None) -> int:
                 target,
                 config.detect_renames and not args.no_renames,
                 progress_callback=progress.plan,
+                compare_mode=args.compare or config.compare,
             )
         finally:
             progress.close_plan()
@@ -170,6 +176,7 @@ def main(argv: list[str] | None = None) -> int:
         result,
         verify,
         recycle,
+        args.compare or config.compare,
     )
     try:
         write_json_atomic(report_path, report)

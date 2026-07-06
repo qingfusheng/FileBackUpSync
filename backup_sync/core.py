@@ -25,6 +25,7 @@ PlanProgress = Callable[[str, int, int, Path | None], None]
 class FileInfo:
     path: Path
     size: int
+    mtime_ns: int
 
 
 @dataclass(frozen=True)
@@ -111,31 +112,36 @@ def scan(
     directories: set[Path] = set()
     small_file_parents: Counter[Path] = Counter()
 
-    for current, dirnames, filenames in os.walk(root, topdown=True, followlinks=False):
-        current_path = Path(current)
+    pending = [root]
+    while pending:
+        current_path = pending.pop()
         relative_dir = current_path.relative_to(root)
-        dirnames[:] = sorted(
-            name
-            for name in dirnames
-            if not _matches(relative_dir / name, patterns)
-            and not (current_path / name).is_symlink()
-        )
         if relative_dir != Path("."):
             directories.add(relative_dir)
-        for name in sorted(filenames):
-            relative = relative_dir / name
-            absolute = current_path / name
-            if _matches(relative, patterns) or absolute.is_symlink():
+        try:
+            entries = sorted(os.scandir(current_path), key=lambda entry: entry.name)
+        except OSError as exc:
+            raise OSError(f"无法读取目录: {current_path}") from exc
+        child_directories: list[Path] = []
+        for entry in entries:
+            relative = relative_dir / entry.name
+            if _matches(relative, patterns) or entry.is_symlink():
                 continue
             try:
-                size = absolute.stat().st_size
+                if entry.is_dir(follow_symlinks=False):
+                    child_directories.append(Path(entry.path))
+                    continue
+                if not entry.is_file(follow_symlinks=False):
+                    continue
+                stat = entry.stat(follow_symlinks=False)
             except OSError as exc:
-                raise OSError(f"无法读取文件信息: {absolute}") from exc
-            files[relative] = FileInfo(relative, size)
+                raise OSError(f"无法读取文件信息: {entry.path}") from exc
+            files[relative] = FileInfo(relative, stat.st_size, stat.st_mtime_ns)
             if progress_callback:
                 progress_callback(relative)
-            if size <= small_file_size:
+            if stat.st_size <= small_file_size:
                 small_file_parents[relative.parent] += 1
+        pending.extend(reversed(child_directories))
     return Snapshot(root, files, frozenset(directories), small_file_parents)
 
 
@@ -147,9 +153,13 @@ def file_digest(path: Path, algorithm: str = "sha256") -> str:
     return digest.hexdigest()
 
 
-def _same_file(source: Snapshot, target: Snapshot, relative: Path) -> bool:
-    if source.files[relative].size != target.files[relative].size:
+def _same_file(source: Snapshot, target: Snapshot, relative: Path, compare_mode: str) -> bool:
+    source_info = source.files[relative]
+    target_info = target.files[relative]
+    if source_info.size != target_info.size:
         return False
+    if compare_mode == "smart" and source_info.mtime_ns == target_info.mtime_ns:
+        return True
     return file_digest(source.root / relative) == file_digest(target.root / relative)
 
 
@@ -158,7 +168,10 @@ def build_plan(
     target: Snapshot,
     detect_renames: bool = True,
     progress_callback: PlanProgress | None = None,
+    compare_mode: str = "smart",
 ) -> Plan:
+    if compare_mode not in {"smart", "hash"}:
+        raise ValueError(f"无效的文件比较模式: {compare_mode}")
     source_paths = set(source.files)
     target_paths = set(target.files)
     common = source_paths & target_paths
@@ -169,7 +182,7 @@ def build_plan(
     for index, path in enumerate(common_paths):
         if progress_callback:
             progress_callback("比较同路径文件", index, len(common_paths), path)
-        if _same_file(source, target, path):
+        if _same_file(source, target, path, compare_mode):
             unchanged += 1
         else:
             actions.append(Action(ActionKind.UPDATE, path, size=source.files[path].size))

@@ -19,6 +19,7 @@ class Config:
     retry_delay: float = 0.5
     reports: Path = Path(".backup-sync/reports")
     state: Path = Path(".backup-sync/state")
+    compare: str = "smart"
 
 
 def load_config(path: Path) -> Config:
@@ -51,6 +52,9 @@ def load_config(path: Path) -> Config:
     retry_delay = float(sync.get("retry_delay", 0.5))
     if retry_max < 0 or retry_delay < 0:
         raise ValueError("retry_max 和 retry_delay 不能为负数")
+    compare = str(scan.get("compare", "smart"))
+    if compare not in ("smart", "hash"):
+        raise ValueError("scan.compare 只能是 smart 或 hash")
     return Config(
         source=source,
         target=target,
@@ -64,4 +68,5 @@ def load_config(path: Path) -> Config:
         retry_delay=retry_delay,
         reports=resolve(raw.get("runtime", {}).get("reports", ".backup-sync/reports")),
         state=resolve(raw.get("runtime", {}).get("state", ".backup-sync/state")),
+        compare=compare,
     )
