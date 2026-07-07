@@ -4,16 +4,29 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "file-backup-sync"
-version = "1.0.0"
+version = "0.2.0"
 description = "Safe one-way incremental directory backup"
+readme = "README.md"
 requires-python = ">=3.11"
 dependencies = ["tomlkit>=0.13", "tqdm>=4.66"]
+keywords = ["backup", "sync", "incremental-backup", "file-management"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Environment :: Console",
+  "Intended Audience :: End Users/Desktop",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: System :: Archiving :: Backup",
+]
 
 [project.scripts]
 backup-sync = "backup_sync.cli:main"
 
 [project.optional-dependencies]
 dev = [
+  "build>=1.2",
   "coverage>=7.6",
   "mypy>=1.14",
   "ruff>=0.9",

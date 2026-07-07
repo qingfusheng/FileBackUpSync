@@ -23,6 +23,7 @@ jobs:
       - run: mypy
       - run: coverage run -m unittest discover -v
       - run: coverage report
+      - run: python -m build
 
   test:
     runs-on: ubuntu-latest

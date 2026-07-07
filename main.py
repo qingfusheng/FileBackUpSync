@@ -1,4 +1,4 @@
-"""Compatibility entry point for the backup-sync command."""
+"""Source/PyCharm entry point for the backup-sync command."""
 
 from backup_sync.cli import main
 

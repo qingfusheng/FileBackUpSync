@@ -1,5 +1,5 @@
-.idea
-.vscode
+.idea/
+.vscode/
 content.txt
 modify.txt
 log.txt
@@ -8,7 +8,11 @@ backup.toml
 __pycache__/
 *.py[cod]
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
 *.egg-info/
+build/
+dist/
 .backup-sync/
 .coverage
 htmlcov/

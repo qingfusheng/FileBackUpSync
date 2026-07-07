@@ -9,9 +9,9 @@
 ![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)
 ![Status](https://img.shields.io/badge/status-active_development-2ea44f)
 [![CI](https://github.com/qingfusheng/FileBackUpSync/actions/workflows/ci.yml/badge.svg)](https://github.com/qingfusheng/FileBackUpSync/actions/workflows/ci.yml)
-![Tests](https://img.shields.io/badge/tests-37_passing-2ea44f)
+![Tests](https://img.shields.io/badge/tests-38_passing-2ea44f)
 
-[快速开始](#快速开始) · [配置说明](#配置说明) · [安全设计](#安全设计) · [路线图](#路线图)
+[快速开始](#快速开始) · [配置说明](#配置说明) · [安全设计](#安全设计) · [更新记录](CHANGELOG.md)
 
 </div>
 
@@ -119,6 +119,8 @@ python3 -m pip install -e .
 backup-sync plan --config backup.toml
 backup-sync sync --config backup.toml
 ```
+
+运行依赖（`tomlkit`、`tqdm`）统一声明在 `pyproject.toml`，安装项目时会自动解析，不需要单独维护 `requirements.txt`。
 
 ## 配置说明
 
@@ -304,6 +306,7 @@ ruff format --check .
 mypy
 coverage run -m unittest discover -v
 coverage report
+python3 -m build
 ```
 
 GitHub Actions 会在 Python 3.11、3.12 和 3.13 上运行测试，并要求核心代码覆盖率不低于 80%。
@@ -326,7 +329,11 @@ GitHub Actions 会在 Python 3.11、3.12 和 3.13 上运行测试，并要求核
 项目入口：
 
 ```text
-main.py                 兼容运行入口
+main.py                 PyCharm/源码运行入口
+pyproject.toml          打包、依赖与质量工具配置
+backup.example.toml     可复制的完整配置模板
+CHANGELOG.md            版本更新记录
+MANIFEST.in             源码发布包附加文件清单
 backup_sync/cli.py      命令行和计划展示
 backup_sync/config.py   TOML 配置读取与路径校验
 backup_sync/config_manager.py  配置查询、原子修改与验证
@@ -350,9 +357,10 @@ tests/                  回归测试
 - [x] plan/sync/resume/runs 子命令
 - [x] 可扩展 analyze 框架
 - [x] 原子配置管理命令
+- [x] wheel / sdist 构建验证
 - [ ] 独立 JSON 日志
 - [ ] duplicates/ignored/integrity 分析器
-- [ ] wheel / sdist 发布
+- [ ] 自动化版本发布
 
 ## 当前状态
 
