@@ -33,9 +33,9 @@ class CliTests(unittest.TestCase):
     def tearDown(self):
         self.temp.cleanup()
 
-    def test_apply_writes_report_and_successful_checkpoint(self):
+    def test_sync_yes_writes_report_and_successful_checkpoint(self):
         (self.source / "file.txt").write_text("content")
-        code = main(["--config", str(self.config), "--apply"])
+        code = main(["sync", "--config", str(self.config), "--yes"])
         self.assertEqual(code, 0)
         reports = list((self.root / ".backup-sync/reports").glob("*.json"))
         states = list((self.root / ".backup-sync/state").glob("*.json"))
@@ -47,7 +47,7 @@ class CliTests(unittest.TestCase):
     def test_partial_failure_can_resume_with_fresh_plan(self):
         (self.source / "file.txt").write_text("content")
         with patch("backup_sync.core._verify_copy", side_effect=OSError("simulated")):
-            first_code = main(["--config", str(self.config), "--apply"])
+            first_code = main(["sync", "--config", str(self.config), "--yes"])
         self.assertEqual(first_code, 1)
         state_path = next((self.root / ".backup-sync/state").glob("*.json"))
         run_id = state_path.stem
@@ -55,20 +55,48 @@ class CliTests(unittest.TestCase):
 
         second_code = main(
             [
+                "resume",
+                run_id,
                 "--config",
                 str(self.config),
-                "--apply",
-                "--resume",
-                run_id,
+                "--yes",
             ]
         )
         self.assertEqual(second_code, 0)
         self.assertEqual((self.target / "file.txt").read_text(), "content")
         self.assertEqual(json.loads(state_path.read_text())["status"], "success")
 
-    def test_resume_requires_apply(self):
-        code = main(["--config", str(self.config), "--resume", "missing"])
-        self.assertEqual(code, 2)
+    def test_plan_never_modifies_target(self):
+        (self.source / "file.txt").write_text("content")
+        code = main(["plan", "--config", str(self.config)])
+        self.assertEqual(code, 0)
+        self.assertFalse((self.target / "file.txt").exists())
+        self.assertFalse((self.root / ".backup-sync").exists())
+
+    def test_sync_requires_yes_in_noninteractive_environment(self):
+        (self.source / "file.txt").write_text("content")
+        with patch("backup_sync.cli.sys.stdin.isatty", return_value=False):
+            code = main(["sync", "--config", str(self.config)])
+        self.assertEqual(code, 0)
+        self.assertFalse((self.target / "file.txt").exists())
+
+    def test_sync_accepts_explicit_confirmation(self):
+        (self.source / "file.txt").write_text("content")
+        with (
+            patch("backup_sync.cli.sys.stdin.isatty", return_value=True),
+            patch("builtins.input", return_value="yes"),
+        ):
+            code = main(["sync", "--config", str(self.config)])
+        self.assertEqual(code, 0)
+        self.assertEqual((self.target / "file.txt").read_text(), "content")
+
+    def test_runs_list_and_show(self):
+        (self.source / "file.txt").write_text("content")
+        self.assertEqual(main(["sync", "--config", str(self.config), "--yes"]), 0)
+        state_path = next((self.root / ".backup-sync/state").glob("*.json"))
+        run_id = state_path.stem
+        self.assertEqual(main(["runs", "list", "--config", str(self.config)]), 0)
+        self.assertEqual(main(["runs", "show", run_id, "--config", str(self.config)]), 0)
 
 
 if __name__ == "__main__":
