@@ -20,6 +20,7 @@ class Config:
     reports: Path = Path(".backup-sync/reports")
     state: Path = Path(".backup-sync/state")
     compare: str = "smart"
+    fingerprint_cache: Path = Path(".backup-sync/fingerprints.sqlite3")
 
 
 def load_config(path: Path) -> Config:
@@ -55,6 +56,15 @@ def load_config(path: Path) -> Config:
     compare = str(scan.get("compare", "smart"))
     if compare not in ("smart", "hash"):
         raise ValueError("scan.compare 只能是 smart 或 hash")
+    runtime = raw.get("runtime", {})
+    reports = resolve(runtime.get("reports", ".backup-sync/reports"))
+    state = resolve(runtime.get("state", ".backup-sync/state"))
+    fingerprint_cache = resolve(
+        runtime.get("fingerprint_cache", ".backup-sync/fingerprints.sqlite3")
+    )
+    for runtime_path in (reports, state, fingerprint_cache):
+        if source in runtime_path.parents or target in runtime_path.parents:
+            raise ValueError("runtime 目录和指纹缓存不能位于源目录或目标目录内部")
     return Config(
         source=source,
         target=target,
@@ -66,7 +76,8 @@ def load_config(path: Path) -> Config:
         verify=verify,
         retry_max=retry_max,
         retry_delay=retry_delay,
-        reports=resolve(raw.get("runtime", {}).get("reports", ".backup-sync/reports")),
-        state=resolve(raw.get("runtime", {}).get("state", ".backup-sync/state")),
+        reports=reports,
+        state=state,
         compare=compare,
+        fingerprint_cache=fingerprint_cache,
     )

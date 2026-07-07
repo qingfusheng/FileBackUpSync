@@ -2,6 +2,20 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)；当前仍处于开发阶段。
 
+## 0.3.0 - 2026-07-07
+
+### Added
+
+- SQLite 持久化 quick/strong 指纹缓存，元数据变化自动失效。
+- BLAKE3 分层 rename 检测：大小分组、三段采样、完整内容确认。
+- 指纹缓存命中、计算次数和实际读取量报告。
+
+### Changed
+
+- 内容校验由 SHA-256 切换为 BLAKE3。
+- `--compare hash` 强制重新读取完整内容，不复用持久化指纹。
+- `plan` 仍不修改源/目标，但会更新本地性能缓存。
+
 ## 0.2.0 - 2026-07-07
 
 ### Added

@@ -40,5 +40,6 @@ class ReportingTests(unittest.TestCase):
             self.assertEqual(saved["run_id"], "run-123")
             self.assertEqual(saved["status"], "success")
             self.assertEqual(saved["compare"], "smart")
+            self.assertEqual(saved["fingerprints"]["algorithm"], "blake3")
             self.assertEqual(saved["summary"]["succeeded"], 1)
             self.assertEqual(saved["actions"][0]["kind"], "copy")

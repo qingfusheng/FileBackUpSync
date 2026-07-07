@@ -25,6 +25,7 @@ KNOWN_KEYS: dict[str, type[Any]] = {
     "sync.retry_delay": float,
     "runtime.reports": str,
     "runtime.state": str,
+    "runtime.fingerprint_cache": str,
 }
 
 

@@ -71,7 +71,9 @@ class CliTests(unittest.TestCase):
         code = main(["plan", "--config", str(self.config)])
         self.assertEqual(code, 0)
         self.assertFalse((self.target / "file.txt").exists())
-        self.assertFalse((self.root / ".backup-sync").exists())
+        self.assertTrue((self.root / ".backup-sync/fingerprints.sqlite3").is_file())
+        self.assertFalse((self.root / ".backup-sync/state").exists())
+        self.assertFalse((self.root / ".backup-sync/reports").exists())
 
     def test_plan_supports_missing_target_without_creating_it(self):
         self.target.rmdir()

@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from .core import ExecutionResult, Plan, Snapshot, VerifyMode
+from .fingerprint import FingerprintStats
 
 
 def new_run_id() -> str:
@@ -26,7 +27,9 @@ def build_report(
     verify: VerifyMode,
     recycle: Path,
     compare: str = "smart",
+    fingerprint_stats: FingerprintStats | None = None,
 ) -> dict[str, Any]:
+    fingerprint_stats = fingerprint_stats or FingerprintStats()
     return {
         "schema_version": 1,
         "run_id": run_id,
@@ -39,6 +42,13 @@ def build_report(
         "recycle": str(recycle),
         "verify": verify.value,
         "compare": compare,
+        "fingerprints": {
+            "algorithm": "blake3",
+            "cache_hits": fingerprint_stats.cache_hits,
+            "quick_computed": fingerprint_stats.quick_computed,
+            "strong_computed": fingerprint_stats.strong_computed,
+            "bytes_read": fingerprint_stats.bytes_read,
+        },
         "scan": {"source_files": len(source.files), "target_files": len(target.files)},
         "summary": {
             "planned": len(plan.actions),

@@ -197,7 +197,10 @@ class SyncTests(unittest.TestCase):
         os.utime(target_file, ns=(source_stat.st_atime_ns, source_stat.st_mtime_ns))
         source, target = self.snapshots()
 
-        with patch("backup_sync.core.file_digest", side_effect=AssertionError("hash called")):
+        with patch(
+            "backup_sync.fingerprint.FingerprintEngine.strong",
+            side_effect=AssertionError("hash called"),
+        ):
             plan = build_plan(source, target, compare_mode="smart")
         self.assertEqual(plan.unchanged, 1)
 

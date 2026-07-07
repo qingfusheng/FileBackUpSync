@@ -35,6 +35,7 @@ from .core import (
     format_size,
     scan,
 )
+from .fingerprint import FingerprintEngine, FingerprintStats
 from .progress import ProgressDisplay
 from .reporting import build_report, new_run_id, write_json_atomic
 
@@ -45,6 +46,7 @@ class PlannedSync:
     target: Snapshot
     plan: Plan
     compare: str
+    fingerprint_stats: FingerprintStats
 
 
 def _add_common(parser: argparse.ArgumentParser) -> None:
@@ -154,16 +156,19 @@ def _plan_sync(config: Config, args: argparse.Namespace, progress: ProgressDispl
             target = empty_snapshot(config.target)
     compare = getattr(args, "compare", None) or config.compare
     try:
-        plan = build_plan(
-            source,
-            target,
-            config.detect_renames and not getattr(args, "no_renames", False),
-            progress_callback=progress.plan,
-            compare_mode=compare,
-        )
+        with FingerprintEngine(config.fingerprint_cache) as fingerprints:
+            plan = build_plan(
+                source,
+                target,
+                config.detect_renames and not getattr(args, "no_renames", False),
+                progress_callback=progress.plan,
+                compare_mode=compare,
+                fingerprint_engine=fingerprints,
+            )
+            fingerprint_stats = fingerprints.stats
     finally:
         progress.close_plan()
-    return PlannedSync(source, target, plan, compare)
+    return PlannedSync(source, target, plan, compare, fingerprint_stats)
 
 
 def _show_plan(planned: PlannedSync, config: Config) -> None:
@@ -183,6 +188,13 @@ def _show_plan(planned: PlannedSync, config: Config) -> None:
         + ", ".join(f"{kind.value}={plan.count(kind)}" for kind in ActionKind)
         + f", unchanged={plan.unchanged}"
     )
+    stats = planned.fingerprint_stats
+    if stats.cache_hits or stats.quick_computed or stats.strong_computed:
+        print(
+            "指纹: "
+            f"cache_hit={stats.cache_hits}, quick={stats.quick_computed}, "
+            f"strong={stats.strong_computed}, read={format_size(stats.bytes_read)}"
+        )
     for action in plan.actions:
         detail = f"{action.source} -> {action.path}" if action.source else str(action.path)
         print(f"  {action.kind.value:7} {detail}")
@@ -257,6 +269,7 @@ def _execute_sync(
         verify,
         recycle,
         planned.compare,
+        planned.fingerprint_stats,
     )
     write_json_atomic(report_path, report)
     checkpoint.finish("success" if result.failed == 0 else "partial_failure", report_path)

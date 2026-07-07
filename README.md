@@ -9,7 +9,7 @@
 ![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)
 ![Status](https://img.shields.io/badge/status-active_development-2ea44f)
 [![CI](https://github.com/qingfusheng/FileBackUpSync/actions/workflows/ci.yml/badge.svg)](https://github.com/qingfusheng/FileBackUpSync/actions/workflows/ci.yml)
-![Tests](https://img.shields.io/badge/tests-38_passing-2ea44f)
+![Tests](https://img.shields.io/badge/tests-49_passing-2ea44f)
 
 [快速开始](#快速开始) · [配置说明](#配置说明) · [安全设计](#安全设计) · [更新记录](CHANGELOG.md)
 
@@ -27,8 +27,8 @@
 
 | 能力 | 行为 |
 | --- | --- |
-| 🔍 先计划再同步 | `plan` 严格只读；`sync` 展示计划并确认后执行 |
-| 🚚 智能识别 rename | 使用文件大小和 SHA-256 配对同内容文件，避免重新复制 |
+| 🔍 先计划再同步 | `plan` 不修改备份内容；`sync` 展示计划并确认后执行 |
+| 🚚 智能识别 rename | size → BLAKE3 采样 → 完整 BLAKE3 分层确认，避免重新复制 |
 | ♻️ 安全回收 | 被替换和删除的旧文件先移入带时间戳的独立回收目录 |
 | 📁 完整目录对齐 | 创建源目录中的空目录，并自底向上清理目标残留空目录 |
 | 🧹 灵活忽略 | 使用 glob 排除缓存、临时文件和不需要备份的目录 |
@@ -155,6 +155,7 @@ retry_delay = 0.5
 [runtime]
 reports = ".backup-sync/reports"
 state = ".backup-sync/state"
+fingerprint_cache = ".backup-sync/fingerprints.sqlite3"
 ```
 
 ### 忽略规则
@@ -203,7 +204,7 @@ backup-sync config validate
 
 `sync.verify` 控制复制后的校验方式：
 
-- `hash`：默认值，对源文件和临时副本执行 SHA-256 校验，可靠性优先。
+- `hash`：默认值，对源文件和临时副本执行完整 BLAKE3 校验，可靠性优先。
 - `size`：仅校验字节数，适合更看重速度且介质可靠的场景。
 
 每个失败动作最多重试 `retry_max` 次，等待时间从 `retry_delay` 开始指数增长。单个文件最终失败不会阻断其他动作；运行返回部分失败状态并写入报告。
@@ -212,8 +213,8 @@ backup-sync config validate
 
 `scan.compare` 控制已有同路径文件的比较策略：
 
-- `smart`：默认值。大小和纳秒级修改时间一致时直接跳过；只有元数据变化时才读取两边内容计算 SHA-256。这是日常增量备份推荐模式。
-- `hash`：每次完整读取两边文件并计算 SHA-256，速度较慢，适合定期审计或怀疑文件时间戳不可信的场景。
+- `smart`：默认值。大小和纳秒级修改时间一致时直接跳过；元数据变化时使用缓存或计算完整 BLAKE3。这是日常增量备份推荐模式。
+- `hash`：忽略持久化命中并完整读取两边文件计算 BLAKE3，适合定期审计或怀疑文件时间戳不可信的场景。
 
 临时执行一次完整审计：
 
@@ -222,6 +223,14 @@ python3 main.py plan --compare hash
 ```
 
 目录遍历使用 `os.scandir()` 复用文件系统返回的元数据，减少外置盘和 NTFS 驱动上的额外查询。外置机械盘通常受随机读取和 USB 延迟限制，因此扫描时 CPU 不会跑满。
+
+### 分层指纹与持久化缓存
+
+rename 候选先按大小分组。小于等于 192 KiB 的文件使用覆盖完整内容的 quick BLAKE3；更大的文件只读取开头、中间和结尾各 64 KiB。只有 quick 指纹相同的大文件才会继续计算完整 BLAKE3，因此大多数非重复文件无需完整读取。
+
+指纹缓存在 `.backup-sync/fingerprints.sqlite3`，根据根目录、文件标识、大小、`mtime_ns` 和 `ctime_ns` 自动失效。一次运行中也会使用内存缓存，避免规划阶段重复读取。缓存损坏或不可写时程序会警告并自动退回内存计算，不影响备份正确性。
+
+`plan` 不修改源目录、目标目录、checkpoint 或报告，但会更新本地性能缓存。计划摘要会显示缓存命中、quick/strong 计算次数和实际读取量。
 
 ### 中断恢复
 
@@ -276,12 +285,12 @@ python3 main.py plan --progress always
 
 ## 安全设计
 
-- **计划严格只读：** `plan` 不创建目标目录、checkpoint 或报告。
+- **计划不改备份内容：** `plan` 不创建目标目录、checkpoint 或报告，仅更新本地指纹性能缓存。
 - **执行需要确认：** `sync` 和 `resume` 默认要求输入完整的 `yes`；非交互环境必须显式使用 `--yes`。
 - **旧内容可找回：** 修改和删除的文件保存在带唯一 `run_id` 的回收目录中。
 - **原子替换：** 新内容先复制到目标同目录临时文件，通过校验后才替换正式文件。
 - **更新失败不破坏旧备份：** 更新时先保留旧版本副本，原子替换失败仍维持原目标文件。
-- **内容一致才 rename：** 候选文件先按大小筛选，再用 SHA-256 确认。
+- **内容一致才 rename：** 候选文件经过 size、quick BLAKE3 和必要时的完整 BLAKE3 分层确认。
 - **路径隔离：** 源、目标不能相同或互相包含；回收目录不能位于二者内部。
 - **保守处理异常目录：** 计划清理的目录若仍非空，会记录警告并保留。
 - **不跟随符号链接：** 防止扫描越出配置的目录边界。

@@ -52,6 +52,16 @@ class ConfigManagerTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "空格"):
             update_file(self.path, "paths.source", f"{self.source} ")
 
+    def test_fingerprint_cache_cannot_be_inside_source(self):
+        original = self.path.read_text()
+        with self.assertRaisesRegex(ValueError, "指纹缓存"):
+            update_file(
+                self.path,
+                "runtime.fingerprint_cache",
+                str(self.source / "fingerprints.sqlite3"),
+            )
+        self.assertEqual(self.path.read_text(), original)
+
     def test_validate_file_reports_healthy_paths(self):
         _, checks = validate_file(self.path)
         self.assertFalse(any(check.level == "error" for check in checks))

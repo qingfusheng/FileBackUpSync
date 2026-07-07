@@ -29,3 +29,4 @@ retry_delay = 0.5
 [runtime]
 reports = ".backup-sync/reports"
 state = ".backup-sync/state"
+fingerprint_cache = ".backup-sync/fingerprints.sqlite3"

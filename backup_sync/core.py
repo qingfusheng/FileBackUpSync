@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import fnmatch
-import hashlib
 import logging
 import os
 import shutil
@@ -15,6 +14,8 @@ from datetime import datetime
 from enum import StrEnum
 from pathlib import Path
 
+from .fingerprint import FULL_QUICK_LIMIT, FingerprintEngine, strong_digest
+
 LOGGER = logging.getLogger(__name__)
 
 ScanProgress = Callable[[Path], None]
@@ -26,6 +27,9 @@ class FileInfo:
     path: Path
     size: int
     mtime_ns: int
+    ctime_ns: int = 0
+    device: int = 0
+    inode: int = 0
 
 
 @dataclass(frozen=True)
@@ -136,7 +140,14 @@ def scan(
                 stat = entry.stat(follow_symlinks=False)
             except OSError as exc:
                 raise OSError(f"无法读取文件信息: {entry.path}") from exc
-            files[relative] = FileInfo(relative, stat.st_size, stat.st_mtime_ns)
+            files[relative] = FileInfo(
+                relative,
+                stat.st_size,
+                stat.st_mtime_ns,
+                stat.st_ctime_ns,
+                stat.st_dev,
+                stat.st_ino,
+            )
             if progress_callback:
                 progress_callback(relative)
             if stat.st_size <= small_file_size:
@@ -149,22 +160,27 @@ def empty_snapshot(root: Path) -> Snapshot:
     return Snapshot(root.expanduser().resolve(), {}, frozenset(), Counter())
 
 
-def file_digest(path: Path, algorithm: str = "sha256") -> str:
-    digest = hashlib.new(algorithm)
-    with path.open("rb") as stream:
-        while chunk := stream.read(1024 * 1024):
-            digest.update(chunk)
-    return digest.hexdigest()
+def file_digest(path: Path) -> str:
+    return strong_digest(path)[0]
 
 
-def _same_file(source: Snapshot, target: Snapshot, relative: Path, compare_mode: str) -> bool:
+def _same_file(
+    source: Snapshot,
+    target: Snapshot,
+    relative: Path,
+    compare_mode: str,
+    fingerprints: FingerprintEngine,
+) -> bool:
     source_info = source.files[relative]
     target_info = target.files[relative]
     if source_info.size != target_info.size:
         return False
     if compare_mode == "smart" and source_info.mtime_ns == target_info.mtime_ns:
         return True
-    return file_digest(source.root / relative) == file_digest(target.root / relative)
+    use_cache = compare_mode != "hash"
+    return fingerprints.strong(
+        source.root, relative, source_info, use_cache=use_cache
+    ) == fingerprints.strong(target.root, relative, target_info, use_cache=use_cache)
 
 
 def build_plan(
@@ -173,6 +189,7 @@ def build_plan(
     detect_renames: bool = True,
     progress_callback: PlanProgress | None = None,
     compare_mode: str = "smart",
+    fingerprint_engine: FingerprintEngine | None = None,
 ) -> Plan:
     if compare_mode not in {"smart", "hash"}:
         raise ValueError(f"无效的文件比较模式: {compare_mode}")
@@ -181,12 +198,13 @@ def build_plan(
     common = source_paths & target_paths
     unchanged = 0
     actions: list[Action] = []
+    fingerprints = fingerprint_engine or FingerprintEngine()
 
     common_paths = sorted(common)
     for index, path in enumerate(common_paths):
         if progress_callback:
             progress_callback("比较同路径文件", index, len(common_paths), path)
-        if _same_file(source, target, path, compare_mode):
+        if _same_file(source, target, path, compare_mode, fingerprints):
             unchanged += 1
         else:
             actions.append(Action(ActionKind.UPDATE, path, size=source.files[path].size))
@@ -209,26 +227,63 @@ def build_plan(
         matching_sizes = sorted(old_by_size.keys() & new_by_size.keys())
         hash_total = sum(len(old_by_size[size]) + len(new_by_size[size]) for size in matching_sizes)
         hash_completed = 0
+        old_by_quick: dict[tuple[int, str], list[Path]] = defaultdict(list)
+        new_by_quick: dict[tuple[int, str], list[Path]] = defaultdict(list)
         for size in matching_sizes:
-            old_by_hash: dict[str, list[Path]] = defaultdict(list)
-            new_by_hash: dict[str, list[Path]] = defaultdict(list)
             for path in sorted(old_by_size[size]):
                 if progress_callback:
                     progress_callback("计算 rename 指纹", hash_completed, hash_total, path)
-                old_by_hash[file_digest(target.root / path)].append(path)
+                quick = fingerprints.quick(target.root, path, target.files[path])
+                old_by_quick[(size, quick)].append(path)
                 hash_completed += 1
             for path in sorted(new_by_size[size]):
                 if progress_callback:
                     progress_callback("计算 rename 指纹", hash_completed, hash_total, path)
-                new_by_hash[file_digest(source.root / path)].append(path)
+                quick = fingerprints.quick(source.root, path, source.files[path])
+                new_by_quick[(size, quick)].append(path)
                 hash_completed += 1
-            for digest in sorted(old_by_hash.keys() & new_by_hash.keys()):
-                for old, new in zip(old_by_hash[digest], new_by_hash[digest], strict=False):
+        if progress_callback and hash_total:
+            progress_callback("计算 rename 指纹", hash_total, hash_total, None)
+
+        matching_quick = sorted(old_by_quick.keys() & new_by_quick.keys())
+        strong_total = sum(
+            len(old_by_quick[key]) + len(new_by_quick[key])
+            for key in matching_quick
+            if key[0] > FULL_QUICK_LIMIT
+        )
+        strong_completed = 0
+        for size, quick in matching_quick:
+            if size <= FULL_QUICK_LIMIT:
+                for old, new in zip(
+                    old_by_quick[(size, quick)],
+                    new_by_quick[(size, quick)],
+                    strict=False,
+                ):
                     actions.append(Action(ActionKind.RENAME, new, source=old, size=size))
                     renamed_old.add(old)
                     renamed_new.add(new)
-        if progress_callback and hash_total:
-            progress_callback("计算 rename 指纹", hash_total, hash_total, None)
+                continue
+            old_by_strong: dict[str, list[Path]] = defaultdict(list)
+            new_by_strong: dict[str, list[Path]] = defaultdict(list)
+            for path in old_by_quick[(size, quick)]:
+                if progress_callback:
+                    progress_callback("确认 rename 内容", strong_completed, strong_total, path)
+                strong = fingerprints.strong(target.root, path, target.files[path])
+                old_by_strong[strong].append(path)
+                strong_completed += 1
+            for path in new_by_quick[(size, quick)]:
+                if progress_callback:
+                    progress_callback("确认 rename 内容", strong_completed, strong_total, path)
+                strong = fingerprints.strong(source.root, path, source.files[path])
+                new_by_strong[strong].append(path)
+                strong_completed += 1
+            for digest in sorted(old_by_strong.keys() & new_by_strong.keys()):
+                for old, new in zip(old_by_strong[digest], new_by_strong[digest], strict=False):
+                    actions.append(Action(ActionKind.RENAME, new, source=old, size=size))
+                    renamed_old.add(old)
+                    renamed_new.add(new)
+        if progress_callback and strong_total:
+            progress_callback("确认 rename 内容", strong_total, strong_total, None)
 
     for path in sorted(additions - renamed_new):
         actions.append(Action(ActionKind.COPY, path, size=source.files[path].size))
