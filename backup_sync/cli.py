@@ -10,9 +10,19 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
+from tomlkit.exceptions import ParseError
+
 from .analyzers import ANALYZERS, AnalyzeContext
 from .checkpoint import Checkpoint, RunRecord, list_runs
 from .config import Config, load_config
+from .config_manager import (
+    ConfigCheck,
+    flatten_document,
+    get_value,
+    read_document,
+    update_file,
+    validate_file,
+)
 from .core import (
     ActionKind,
     ActionResult,
@@ -90,6 +100,24 @@ def parser() -> argparse.ArgumentParser:
         _add_common(analyzer_parser)
         analyzer_parser.add_argument("--json", action="store_true", dest="as_json")
         analyzer.add_arguments(analyzer_parser)
+
+    config = commands.add_parser("config", help="读取、修改和验证配置")
+    config_commands = config.add_subparsers(dest="config_command", required=True)
+    config_path = config_commands.add_parser("path", help="显示配置文件路径")
+    _add_common(config_path)
+    config_list = config_commands.add_parser("list", help="列出配置项")
+    _add_common(config_list)
+    config_list.add_argument("--json", action="store_true", dest="as_json")
+    config_get = config_commands.add_parser("get", help="读取配置项")
+    config_get.add_argument("key")
+    _add_common(config_get)
+    config_get.add_argument("--json", action="store_true", dest="as_json")
+    config_set = config_commands.add_parser("set", help="原子更新配置项")
+    config_set.add_argument("key")
+    config_set.add_argument("value")
+    _add_common(config_set)
+    config_validate = config_commands.add_parser("validate", help="检查配置与文件系统")
+    _add_common(config_validate)
     return root
 
 
@@ -312,12 +340,51 @@ def _handle_analyze(args: argparse.Namespace, config: Config) -> int:
     return 0 if result.summary.get("healthy", True) is not False else 1
 
 
+def _handle_config(args: argparse.Namespace) -> int:
+    path = args.config.expanduser().resolve()
+    if args.config_command == "path":
+        print(path)
+        return 0
+    try:
+        if args.config_command == "list":
+            values = flatten_document(read_document(path))
+            if args.as_json:
+                print(json.dumps(values, ensure_ascii=False, indent=2))
+            else:
+                for key, value in sorted(values.items()):
+                    print(f"{key} = {value}")
+            return 0
+        if args.config_command == "get":
+            value = get_value(read_document(path), args.key)
+            print(json.dumps(value, ensure_ascii=False) if args.as_json else value)
+            return 0
+        if args.config_command == "set":
+            checks = update_file(path, args.key, args.value)
+            print(f"已更新 {args.key}，配置文件: {path}")
+            _print_config_checks(checks)
+            return 0
+        _, checks = validate_file(path)
+        _print_config_checks(checks)
+        return 2 if any(check.level == "error" for check in checks) else 0
+    except (OSError, ValueError, tomllib.TOMLDecodeError, ParseError) as exc:
+        print(f"配置错误: {exc}", file=sys.stderr)
+        return 2
+
+
+def _print_config_checks(checks: list[ConfigCheck]) -> None:
+    icons = {"ok": "✓", "warning": "⚠", "error": "✗"}
+    for check in checks:
+        print(f"{icons[check.level]} {check.name}: {check.message}")
+
+
 def main(argv: list[str] | None = None) -> int:
     args = parser().parse_args(argv)
     logging.basicConfig(
         level=logging.DEBUG if args.verbose else logging.INFO,
         format="%(asctime)s %(levelname)s %(message)s",
     )
+    if args.command == "config":
+        return _handle_config(args)
     try:
         config = _load(args.config)
     except (ValueError, tomllib.TOMLDecodeError, FileNotFoundError) as exc:

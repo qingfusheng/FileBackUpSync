@@ -114,6 +114,14 @@ class CliTests(unittest.TestCase):
         )
         self.assertEqual(code, 0)
 
+    def test_config_get_set_and_validate_commands(self):
+        self.assertEqual(main(["config", "get", "paths.source", "--config", str(self.config)]), 0)
+        self.assertEqual(
+            main(["config", "set", "scan.compare", "hash", "--config", str(self.config)]),
+            0,
+        )
+        self.assertEqual(main(["config", "validate", "--config", str(self.config)]), 0)
+
 
 if __name__ == "__main__":
     unittest.main()

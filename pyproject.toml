@@ -7,7 +7,7 @@ name = "file-backup-sync"
 version = "1.0.0"
 description = "Safe one-way incremental directory backup"
 requires-python = ">=3.11"
-dependencies = ["tqdm>=4.66"]
+dependencies = ["tomlkit>=0.13", "tqdm>=4.66"]
 
 [project.scripts]
 backup-sync = "backup_sync.cli:main"
