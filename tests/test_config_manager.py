@@ -56,6 +56,16 @@ class ConfigManagerTests(unittest.TestCase):
         _, checks = validate_file(self.path)
         self.assertFalse(any(check.level == "error" for check in checks))
 
+    def test_validate_file_reports_existing_trailing_space(self):
+        self.path.write_text(f'[paths]\nsource = "{self.source} "\ntarget = "{self.target}"\n')
+        _, checks = validate_file(self.path)
+        self.assertTrue(any("尾随空格" in check.message for check in checks))
+
+    def test_validate_file_reports_malformed_toml(self):
+        self.path.write_text("[paths\n")
+        _, checks = validate_file(self.path)
+        self.assertEqual(checks[0].level, "error")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -145,6 +145,10 @@ def scan(
     return Snapshot(root, files, frozenset(directories), small_file_parents)
 
 
+def empty_snapshot(root: Path) -> Snapshot:
+    return Snapshot(root.expanduser().resolve(), {}, frozenset(), Counter())
+
+
 def file_digest(path: Path, algorithm: str = "sha256") -> str:
     digest = hashlib.new(algorithm)
     with path.open("rb") as stream:

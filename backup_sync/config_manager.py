@@ -8,6 +8,7 @@ from typing import Any
 
 import tomlkit
 from tomlkit import TOMLDocument
+from tomlkit.exceptions import ParseError
 
 from .config import Config, load_config
 
@@ -121,6 +122,20 @@ def validate_config(config: Config) -> list[ConfigCheck]:
 
 
 def validate_file(path: Path) -> tuple[Config | None, list[ConfigCheck]]:
+    try:
+        document = read_document(path)
+        whitespace_checks = []
+        for key in ("paths.source", "paths.target", "paths.recycle"):
+            try:
+                value = get_value(document, key)
+            except ValueError:
+                continue
+            if isinstance(value, str) and value != value.strip():
+                whitespace_checks.append(ConfigCheck("error", key, "路径包含前导或尾随空格"))
+        if whitespace_checks:
+            return None, whitespace_checks
+    except (OSError, ValueError, ParseError) as exc:
+        return None, [ConfigCheck("error", "syntax", str(exc))]
     try:
         config = load_config(path)
     except (OSError, ValueError) as exc:

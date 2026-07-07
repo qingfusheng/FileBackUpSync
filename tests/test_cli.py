@@ -73,6 +73,13 @@ class CliTests(unittest.TestCase):
         self.assertFalse((self.target / "file.txt").exists())
         self.assertFalse((self.root / ".backup-sync").exists())
 
+    def test_plan_supports_missing_target_without_creating_it(self):
+        self.target.rmdir()
+        (self.source / "file.txt").write_text("content")
+        code = main(["plan", "--config", str(self.config)])
+        self.assertEqual(code, 0)
+        self.assertFalse(self.target.exists())
+
     def test_sync_requires_yes_in_noninteractive_environment(self):
         (self.source / "file.txt").write_text("content")
         with patch("backup_sync.cli.sys.stdin.isatty", return_value=False):

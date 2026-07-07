@@ -30,6 +30,7 @@ from .core import (
     Snapshot,
     VerifyMode,
     build_plan,
+    empty_snapshot,
     execute,
     format_size,
     scan,
@@ -142,12 +143,15 @@ def _plan_sync(config: Config, args: argparse.Namespace, progress: ProgressDispl
         def target_progress(_path: Path) -> None:
             target_bar.update(1)
 
-        target = scan(
-            config.target,
-            (),
-            config.small_file_size,
-            progress_callback=target_progress,
-        )
+        if config.target.exists():
+            target = scan(
+                config.target,
+                (),
+                config.small_file_size,
+                progress_callback=target_progress,
+            )
+        else:
+            target = empty_snapshot(config.target)
     compare = getattr(args, "compare", None) or config.compare
     try:
         plan = build_plan(
