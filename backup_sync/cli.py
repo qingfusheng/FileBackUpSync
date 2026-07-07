@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
+from .analyzers import ANALYZERS, AnalyzeContext
 from .checkpoint import Checkpoint, RunRecord, list_runs
 from .config import Config, load_config
 from .core import (
@@ -81,6 +82,14 @@ def parser() -> argparse.ArgumentParser:
     runs_show.add_argument("run_id")
     _add_common(runs_show)
     runs_show.add_argument("--json", action="store_true", dest="as_json")
+
+    analyze = commands.add_parser("analyze", help="运行只读分析器")
+    analyze_commands = analyze.add_subparsers(dest="analyzer", required=True)
+    for analyzer in ANALYZERS.values():
+        analyzer_parser = analyze_commands.add_parser(analyzer.name, help=analyzer.description)
+        _add_common(analyzer_parser)
+        analyzer_parser.add_argument("--json", action="store_true", dest="as_json")
+        analyzer.add_arguments(analyzer_parser)
     return root
 
 
@@ -289,6 +298,20 @@ def _handle_runs(args: argparse.Namespace, config: Config) -> int:
     return 0
 
 
+def _handle_analyze(args: argparse.Namespace, config: Config) -> int:
+    analyzer = ANALYZERS[args.analyzer]
+    try:
+        result = analyzer.analyze(AnalyzeContext(config, ProgressDisplay(args.progress)), args)
+    except (OSError, ValueError) as exc:
+        print(f"分析错误: {exc}", file=sys.stderr)
+        return 3
+    if args.as_json:
+        print(json.dumps(result.as_dict(), ensure_ascii=False, indent=2))
+    else:
+        analyzer.render(result)
+    return 0 if result.summary.get("healthy", True) is not False else 1
+
+
 def main(argv: list[str] | None = None) -> int:
     args = parser().parse_args(argv)
     logging.basicConfig(
@@ -302,6 +325,8 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     if args.command == "runs":
         return _handle_runs(args, config)
+    if args.command == "analyze":
+        return _handle_analyze(args, config)
 
     checkpoint: Checkpoint | None = None
     if args.command == "resume":

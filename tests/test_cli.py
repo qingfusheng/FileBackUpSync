@@ -98,6 +98,22 @@ class CliTests(unittest.TestCase):
         self.assertEqual(main(["runs", "list", "--config", str(self.config)]), 0)
         self.assertEqual(main(["runs", "show", run_id, "--config", str(self.config)]), 0)
 
+    def test_analyze_small_files_command(self):
+        (self.source / "tiny.txt").write_bytes(b"x")
+        code = main(
+            [
+                "analyze",
+                "small-files",
+                "--config",
+                str(self.config),
+                "--size",
+                "10",
+                "--count",
+                "1",
+            ]
+        )
+        self.assertEqual(code, 0)
+
 
 if __name__ == "__main__":
     unittest.main()
