@@ -2,6 +2,19 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)；当前仍处于开发阶段。
 
+## 0.6.2 - 2026-07-08
+
+### Changed
+
+- `analyze large-files`、`analyze duplicates` 和 `analyze symlinks` 改为 `--scope` 与 `--path` 二选一，避免默认混扫配置源目录。
+- `analyze small-files` 和 `analyze ignored` 支持直接通过 `--path` 指定分析目录。
+- `config` 子命令改为只接受真实存在的配置文件，不再对缺失的默认路径做假解析。
+
+### Fixed
+
+- 修正 `config get/path/list/set/validate` 在配置文件不存在时仍返回路径或后续崩溃的问题。
+- 更新 CLI、README 和分析器测试，覆盖显式路径分析和严格配置解析行为。
+
 ## 0.6.1 - 2026-07-08
 
 ### Fixed
