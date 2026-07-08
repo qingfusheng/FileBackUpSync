@@ -123,6 +123,26 @@ class CliTests(unittest.TestCase):
         )
         self.assertEqual(code, 0)
 
+    def test_analyze_small_files_with_path(self):
+        extra = self.root / "extra"
+        (extra / "cache").mkdir(parents=True)
+        (extra / "cache" / "tiny.txt").write_bytes(b"x")
+        code = main(
+            [
+                "analyze",
+                "small-files",
+                "--config",
+                str(self.config),
+                "--path",
+                str(extra),
+                "--size",
+                "10",
+                "--count",
+                "1",
+            ]
+        )
+        self.assertEqual(code, 0)
+
     def test_analyze_ignored_command(self):
         self.config.write_text(
             "\n".join(
@@ -140,6 +160,24 @@ class CliTests(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertFalse(any(self.target.iterdir()))
 
+    def test_analyze_ignored_with_path(self):
+        self.config.write_text(
+            "\n".join(
+                [
+                    "[paths]",
+                    f'source = "{self.source}"',
+                    f'target = "{self.target}"',
+                    "[ignore]",
+                    'patterns = ["*.tmp"]',
+                ]
+            )
+        )
+        extra = self.root / "extra"
+        extra.mkdir()
+        (extra / "scratch.tmp").write_text("tmp")
+        code = main(["analyze", "ignored", "--config", str(self.config), "--path", str(extra)])
+        self.assertEqual(code, 0)
+
     def test_analyze_large_files_command(self):
         (self.source / "large.bin").write_bytes(b"x" * 8)
         code = main(
@@ -148,6 +186,8 @@ class CliTests(unittest.TestCase):
                 "large-files",
                 "--config",
                 str(self.config),
+                "--scope",
+                "source",
                 "--min-size",
                 "8",
             ]
@@ -178,13 +218,23 @@ class CliTests(unittest.TestCase):
             (self.source / "link.txt").symlink_to("real.txt")
         except OSError as exc:
             self.skipTest(f"symlink unsupported: {exc}")
-        code = main(["analyze", "symlinks", "--config", str(self.config)])
+        code = main(["analyze", "symlinks", "--config", str(self.config), "--scope", "source"])
         self.assertEqual(code, 0)
 
     def test_analyze_duplicates_command(self):
         (self.source / "a.txt").write_text("same")
         (self.source / "b.txt").write_text("same")
-        code = main(["analyze", "duplicates", "--config", str(self.config), "--yes"])
+        code = main(
+            [
+                "analyze",
+                "duplicates",
+                "--config",
+                str(self.config),
+                "--scope",
+                "source",
+                "--yes",
+            ]
+        )
         self.assertEqual(code, 0)
 
     def test_analyze_duplicates_target_scope_command(self):

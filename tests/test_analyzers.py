@@ -60,6 +60,22 @@ class AnalyzerTests(unittest.TestCase):
         self.assertEqual(result.findings[0].title, "cache")
         self.assertEqual(result.findings[0].details["count"], 3)
 
+    def test_small_files_can_scan_explicit_path(self):
+        extra = self.root / "extra"
+        cache = extra / "cache"
+        cache.mkdir(parents=True)
+        for index in range(3):
+            (cache / f"{index}.txt").write_bytes(b"x")
+
+        result = SmallFilesAnalyzer().analyze(
+            self.context,
+            argparse.Namespace(path=extra, size=10, count=2, limit=20),
+        )
+
+        self.assertEqual(result.summary["root"], str(extra.resolve()))
+        self.assertEqual(result.summary["hotspot_count"], 1)
+        self.assertEqual(result.findings[0].title, "cache")
+
     def test_health_checks_source_and_target(self):
         result = HealthAnalyzer().analyze(self.context, argparse.Namespace())
         self.assertTrue(result.summary["healthy"])
@@ -107,6 +123,32 @@ class AnalyzerTests(unittest.TestCase):
         self.assertEqual(result.summary["ignored_directories"], 1)
         self.assertEqual({finding.title for finding in result.findings}, {"scratch.tmp", "cache"})
         self.assertEqual(set(self.target.iterdir()), before_target)
+
+    def test_ignored_can_scan_explicit_path(self):
+        self.config_path.write_text(
+            "\n".join(
+                [
+                    "[paths]",
+                    f'source = "{self.source}"',
+                    f'target = "{self.target}"',
+                    "[ignore]",
+                    'patterns = ["*.tmp", "cache/"]',
+                ]
+            )
+        )
+        extra = self.root / "extra"
+        cache = extra / "cache"
+        cache.mkdir(parents=True)
+        (extra / "scratch.tmp").write_text("tmp")
+        (cache / "nested.txt").write_text("ignored with directory")
+
+        context = AnalyzeContext(load_config(self.config_path), ProgressDisplay("never"))
+        result = IgnoredAnalyzer().analyze(context, argparse.Namespace(path=extra, limit=10))
+
+        self.assertEqual(result.summary["root"], str(extra.resolve()))
+        self.assertEqual(result.summary["ignored_files"], 1)
+        self.assertEqual(result.summary["ignored_directories"], 1)
+        self.assertEqual({finding.title for finding in result.findings}, {"scratch.tmp", "cache"})
 
     def test_duplicates_reports_matching_content(self):
         (self.source / "a.txt").write_text("same")
@@ -158,13 +200,14 @@ class AnalyzerTests(unittest.TestCase):
     def test_duplicates_can_scan_explicit_path(self):
         extra = self.root / "extra"
         extra.mkdir()
+        (self.source / "source.txt").write_text("same")
         (extra / "a.txt").write_text("same")
         (extra / "b.txt").write_text("same")
 
         result = DuplicatesAnalyzer().analyze(
             self.context,
             argparse.Namespace(
-                scope="source",
+                scope=None,
                 path=(extra,),
                 limit=10,
                 min_size=1,
@@ -174,10 +217,9 @@ class AnalyzerTests(unittest.TestCase):
         )
 
         self.assertEqual(result.summary["paths"], [str(extra)])
+        self.assertEqual(result.summary["scope"], "path")
         self.assertEqual(result.summary["duplicate_groups"], 1)
-        self.assertTrue(
-            {"path1:a.txt", "path1:b.txt"}.issubset(result.findings[0].details["paths"])
-        )
+        self.assertEqual(set(result.findings[0].details["paths"]), {"path1:a.txt", "path1:b.txt"})
 
     def test_duplicates_requires_confirmation_for_hashing(self):
         (self.source / "a.txt").write_text("same")
@@ -248,6 +290,20 @@ class AnalyzerTests(unittest.TestCase):
         self.assertEqual(result.summary["scope"], "target")
         self.assertEqual(result.findings[0].title, "target:large.bin")
 
+    def test_large_files_can_scan_explicit_path(self):
+        extra = self.root / "extra"
+        extra.mkdir()
+        (extra / "large.bin").write_bytes(b"x" * 8)
+
+        result = LargeFilesAnalyzer().analyze(
+            self.context,
+            argparse.Namespace(path=extra, min_size=8, limit=10),
+        )
+
+        self.assertEqual(result.summary["scope"], "path")
+        self.assertEqual(result.summary["paths"], [str(extra)])
+        self.assertEqual(result.findings[0].title, "path1:large.bin")
+
     def test_symlinks_reports_links_and_broken_links(self):
         (self.source / "real.txt").write_text("content")
         try:
@@ -284,6 +340,24 @@ class AnalyzerTests(unittest.TestCase):
         self.assertEqual(result.summary["symlinks"], 2)
         self.assertEqual(result.summary["shown"], 1)
         self.assertEqual(result.findings[0].title, "source:broken-link")
+
+    def test_symlinks_can_scan_explicit_path(self):
+        extra = self.root / "extra"
+        extra.mkdir()
+        try:
+            (extra / "real.txt").write_text("content")
+            (extra / "ok-link").symlink_to("real.txt")
+        except OSError as exc:
+            self.skipTest(f"symlink unsupported: {exc}")
+
+        result = SymlinksAnalyzer().analyze(
+            self.context,
+            argparse.Namespace(path=(extra,), limit=10, broken_only=False),
+        )
+
+        self.assertEqual(result.summary["scope"], "path")
+        self.assertEqual(result.summary["paths"], [str(extra)])
+        self.assertEqual(result.findings[0].title, "path1:ok-link")
 
 
 if __name__ == "__main__":

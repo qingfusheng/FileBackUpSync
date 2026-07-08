@@ -28,18 +28,18 @@ class DuplicatesAnalyzer(Analyzer):
     description = "按内容 hash 查找重复文件"
 
     def add_arguments(self, parser: argparse.ArgumentParser) -> None:
-        parser.add_argument(
+        group = parser.add_mutually_exclusive_group(required=True)
+        group.add_argument(
             "--scope",
             choices=("source", "target"),
-            default="source",
-            help="分析源目录或目标目录",
+            help="分析配置中的源目录或目标目录，与 --path 二选一",
         )
-        parser.add_argument(
+        group.add_argument(
             "--path",
             type=Path,
             action="append",
-            default=[],
-            help="额外指定待分析目录，可重复传入",
+            default=None,
+            help="直接指定待分析目录；可重复传入，与 --scope 二选一",
         )
         parser.add_argument("--limit", type=int, default=20, help="最多展示的重复文件组数")
         parser.add_argument("--min-size", type=int, default=1, help="参与重复检测的最小文件字节数")
@@ -53,7 +53,12 @@ class DuplicatesAnalyzer(Analyzer):
     def analyze(self, context: AnalyzeContext, args: argparse.Namespace) -> AnalysisResult:
         if args.limit < 1 or args.min_size < 0:
             raise ValueError("limit 必须大于 0，min-size 不能为负数")
-        requested_paths = tuple(args.path)
+        explicit_paths = getattr(args, "path", None)
+        if isinstance(explicit_paths, Path):
+            requested_paths = (explicit_paths,)
+        else:
+            requested_paths = tuple(explicit_paths or ())
+        scope = getattr(args, "scope", None)
         entries = self._collect_entries(context, args)
         by_size: dict[int, list[DuplicateEntry]] = defaultdict(list)
         for entry in entries:
@@ -99,7 +104,7 @@ class DuplicatesAnalyzer(Analyzer):
         return AnalysisResult(
             self.name,
             {
-                "scope": args.scope,
+                "scope": scope if scope is not None else "path",
                 "paths": [str(path) for path in requested_paths],
                 "scanned_files": len(entries),
                 "candidate_groups": len(candidates),
@@ -119,9 +124,24 @@ class DuplicatesAnalyzer(Analyzer):
         context: AnalyzeContext,
         args: argparse.Namespace,
     ) -> list[DuplicateEntry]:
-        paths: tuple[Path, ...] = tuple(args.path)
+        explicit_paths = getattr(args, "path", None)
+        if isinstance(explicit_paths, Path):
+            paths: tuple[Path, ...] = (explicit_paths,)
+        else:
+            paths = tuple(explicit_paths or ())
+        scope = getattr(args, "scope", None)
+        if explicit_paths:
+            snapshots = [
+                (f"path{index}", self._scan(f"path{index}", path.expanduser().resolve(), (), context))
+                for index, path in enumerate(paths, start=1)
+            ]
+            return [
+                DuplicateEntry(label, snapshot.root, path, info)
+                for label, snapshot in snapshots
+                for path, info in snapshot.files.items()
+            ]
         snapshots: list[tuple[str, Snapshot]] = []
-        if args.scope == "source":
+        if scope == "source":
             snapshots.append(
                 (
                     "source",
@@ -129,7 +149,7 @@ class DuplicatesAnalyzer(Analyzer):
                     or self._scan("source", context.config.source, context.config.ignore, context),
                 )
             )
-        if args.scope == "target":
+        if scope == "target":
             target = context.target
             if target is None:
                 if not context.config.target.exists():
@@ -173,11 +193,16 @@ class DuplicatesAnalyzer(Analyzer):
         candidates: list[list[DuplicateEntry]],
         estimated_bytes: int,
     ) -> AnalysisResult:
-        requested_paths = tuple(args.path)
+        explicit_paths = getattr(args, "path", None)
+        if isinstance(explicit_paths, Path):
+            requested_paths = (explicit_paths,)
+        else:
+            requested_paths = tuple(explicit_paths or ())
+        scope = getattr(args, "scope", None)
         return AnalysisResult(
             self.name,
             {
-                "scope": args.scope,
+                "scope": scope if scope is not None else "path",
                 "paths": [str(path) for path in requested_paths],
                 "scanned_files": len(entries),
                 "candidate_groups": len(candidates),

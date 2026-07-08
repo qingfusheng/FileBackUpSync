@@ -13,6 +13,7 @@ class IgnoredAnalyzer(Analyzer):
     description = "检查 ignore 规则命中的文件和目录"
 
     def add_arguments(self, parser: argparse.ArgumentParser) -> None:
+        parser.add_argument("--path", type=Path, help="直接指定分析目录，覆盖配置中的 source")
         parser.add_argument("--limit", type=int, default=50, help="最多展示的忽略项数量")
 
     def analyze(self, context: AnalyzeContext, args: argparse.Namespace) -> AnalysisResult:
@@ -27,7 +28,12 @@ class IgnoredAnalyzer(Analyzer):
                 ("配置中没有启用 ignore 规则。",),
             )
 
-        root = context.config.source.expanduser().resolve()
+        explicit_path = getattr(args, "path", None)
+        root = (
+            explicit_path.expanduser().resolve()
+            if explicit_path is not None
+            else context.config.source.expanduser().resolve()
+        )
         if not root.is_dir():
             raise ValueError(f"目录不存在或不可读: {str(root)!r}")
 
@@ -87,6 +93,7 @@ class IgnoredAnalyzer(Analyzer):
                 "ignored_files": ignored_files,
                 "ignored_directories": ignored_directories,
                 "shown": len(findings),
+                "root": str(root),
             },
             tuple(findings),
             warnings,
@@ -95,7 +102,7 @@ class IgnoredAnalyzer(Analyzer):
     def render(self, result: AnalysisResult) -> None:
         summary = result.summary
         print(
-            f"检查 {summary['patterns']} 条 ignore 规则；命中 "
+            f"检查 {summary['patterns']} 条 ignore 规则；扫描 {summary['root']}；命中 "
             f"{summary['ignored_files']} 个文件、{summary['ignored_directories']} 个目录。"
         )
         for finding in result.findings:

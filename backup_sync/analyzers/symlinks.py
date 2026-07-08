@@ -27,18 +27,18 @@ class SymlinksAnalyzer(Analyzer):
     description = "列出扫描时会跳过的符号链接"
 
     def add_arguments(self, parser: argparse.ArgumentParser) -> None:
-        parser.add_argument(
+        group = parser.add_mutually_exclusive_group(required=True)
+        group.add_argument(
             "--scope",
             choices=("source", "target"),
-            default="source",
-            help="分析源目录或目标目录",
+            help="分析配置中的源目录或目标目录，与 --path 二选一",
         )
-        parser.add_argument(
+        group.add_argument(
             "--path",
             type=Path,
             action="append",
-            default=[],
-            help="额外指定待分析目录，可重复传入",
+            default=None,
+            help="直接指定待分析目录；可重复传入，与 --scope 二选一",
         )
         parser.add_argument("--limit", type=int, default=50, help="最多展示的符号链接数量")
         parser.add_argument("--broken-only", action="store_true", help="只展示断开的符号链接")
@@ -46,7 +46,12 @@ class SymlinksAnalyzer(Analyzer):
     def analyze(self, context: AnalyzeContext, args: argparse.Namespace) -> AnalysisResult:
         if args.limit < 1:
             raise ValueError("limit 必须大于 0")
-        requested_paths = tuple(args.path)
+        explicit_paths = getattr(args, "path", None)
+        if isinstance(explicit_paths, Path):
+            requested_paths = (explicit_paths,)
+        else:
+            requested_paths = tuple(explicit_paths or ())
+        scope = getattr(args, "scope", None)
         entries = self._collect_entries(context, args)
         if args.broken_only:  # noqa: SIM108 - keep this branch explicit for CLI option clarity.
             symlinks = [entry for entry in entries if entry.broken]
@@ -65,7 +70,7 @@ class SymlinksAnalyzer(Analyzer):
         return AnalysisResult(
             self.name,
             {
-                "scope": args.scope,
+                "scope": scope if scope is not None else "path",
                 "paths": [str(path) for path in requested_paths],
                 "symlinks": len(entries),
                 "broken": broken_count,
@@ -80,21 +85,31 @@ class SymlinksAnalyzer(Analyzer):
         context: AnalyzeContext,
         args: argparse.Namespace,
     ) -> list[SymlinkEntry]:
-        roots: list[tuple[str, Path, tuple[str, ...]]] = []
-        if args.scope == "source":
-            roots.append(
-                (
-                    "source",
-                    context.config.source.expanduser().resolve(),
-                    normalize_ignore_patterns(context.config.ignore),
+        explicit_paths = getattr(args, "path", None)
+        if explicit_paths:
+            if isinstance(explicit_paths, Path):
+                paths = (explicit_paths,)
+            else:
+                paths = tuple(explicit_paths)
+            roots = [
+                (f"path{index}", path.expanduser().resolve(), ())
+                for index, path in enumerate(paths, start=1)
+            ]
+        else:
+            scope = getattr(args, "scope", None)
+            roots = []
+            if scope == "source":
+                roots.append(
+                    (
+                        "source",
+                        context.config.source.expanduser().resolve(),
+                        normalize_ignore_patterns(context.config.ignore),
+                    )
                 )
-            )
-        if args.scope == "target":
-            if not context.config.target.exists():
-                raise ValueError(f"目标目录不存在: {context.config.target}")
-            roots.append(("target", context.config.target.expanduser().resolve(), ()))
-        for index, path in enumerate(tuple(args.path), start=1):
-            roots.append((f"path{index}", path.expanduser().resolve(), ()))
+            if scope == "target":
+                if not context.config.target.exists():
+                    raise ValueError(f"目标目录不存在: {context.config.target}")
+                roots.append(("target", context.config.target.expanduser().resolve(), ()))
 
         entries: list[SymlinkEntry] = []
         for label, root, ignore_patterns in roots:
