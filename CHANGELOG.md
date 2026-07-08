@@ -2,6 +2,12 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)；当前仍处于开发阶段。
 
+## 0.6.1 - 2026-07-08
+
+### Fixed
+
+- 修复 `analyze large-files`、`analyze duplicates` 和 `analyze symlinks` 的 `--path` 参数在 `argparse` 中使用 `action="append"` 时默认值为元组导致的解析崩溃。
+
 ## 0.6.0 - 2026-07-08
 
 ### Added
