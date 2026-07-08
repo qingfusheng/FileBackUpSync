@@ -16,3 +16,4 @@ dist/
 .backup-sync/
 .coverage
 htmlcov/
+.DS_Store
