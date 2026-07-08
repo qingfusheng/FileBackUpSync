@@ -132,7 +132,10 @@ class DuplicatesAnalyzer(Analyzer):
         scope = getattr(args, "scope", None)
         if explicit_paths:
             snapshots = [
-                (f"path{index}", self._scan(f"path{index}", path.expanduser().resolve(), (), context))
+                (
+                    f"path{index}",
+                    self._scan(f"path{index}", path.expanduser().resolve(), (), context),
+                )
                 for index, path in enumerate(paths, start=1)
             ]
             return [
