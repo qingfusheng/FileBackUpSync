@@ -7,12 +7,15 @@ from typing import Any
 
 from ..config import Config
 from ..progress import ProgressDisplay
+from ..sync import Snapshot
 
 
 @dataclass(frozen=True)
 class AnalyzeContext:
     config: Config
     progress: ProgressDisplay
+    source: Snapshot | None = None
+    target: Snapshot | None = None
 
 
 @dataclass(frozen=True)

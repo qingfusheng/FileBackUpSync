@@ -5,6 +5,8 @@ from pathlib import Path
 
 from backup_sync.analyzers.base import AnalysisResult, AnalyzeContext, Analyzer
 from backup_sync.analyzers.health import HealthAnalyzer
+from backup_sync.analyzers.ignored import IgnoredAnalyzer
+from backup_sync.analyzers.registry import ANALYZERS
 from backup_sync.analyzers.small_files import SmallFilesAnalyzer
 from backup_sync.config import load_config
 from backup_sync.progress import ProgressDisplay
@@ -65,6 +67,37 @@ class AnalyzerTests(unittest.TestCase):
         analyzer = DummyAnalyzer()
         result = analyzer.analyze(self.context, argparse.Namespace(value="custom"))
         self.assertEqual(result.summary["value"], "custom")
+
+    def test_registry_uses_explicit_analyzer_classes(self):
+        self.assertIs(ANALYZERS["small-files"], SmallFilesAnalyzer)
+        self.assertIs(ANALYZERS["health"], HealthAnalyzer)
+
+    def test_ignored_reports_matches_without_touching_target(self):
+        self.config_path.write_text(
+            "\n".join(
+                [
+                    "[paths]",
+                    f'source = "{self.source}"',
+                    f'target = "{self.target}"',
+                    "[ignore]",
+                    'patterns = ["*.tmp", "cache/"]',
+                ]
+            )
+        )
+        (self.source / "keep.txt").write_text("keep")
+        (self.source / "scratch.tmp").write_text("tmp")
+        cache = self.source / "cache"
+        cache.mkdir()
+        (cache / "nested.txt").write_text("ignored with directory")
+        before_target = set(self.target.iterdir())
+
+        context = AnalyzeContext(load_config(self.config_path), ProgressDisplay("never"))
+        result = IgnoredAnalyzer().analyze(context, argparse.Namespace(limit=10))
+
+        self.assertEqual(result.summary["ignored_files"], 1)
+        self.assertEqual(result.summary["ignored_directories"], 1)
+        self.assertEqual({finding.title for finding in result.findings}, {"scratch.tmp", "cache"})
+        self.assertEqual(set(self.target.iterdir()), before_target)
 
 
 if __name__ == "__main__":

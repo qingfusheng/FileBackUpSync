@@ -12,7 +12,8 @@ from pathlib import Path
 
 from tomlkit.exceptions import ParseError
 
-from .analyzers import ANALYZERS, AnalyzeContext
+from .analyzers import AnalyzeContext
+from .analyzers.registry import ANALYZERS
 from .config import Config, load_config
 from .config_manager import (
     ConfigCheck,
@@ -97,7 +98,8 @@ def parser() -> argparse.ArgumentParser:
 
     analyze = commands.add_parser("analyze", help="运行只读分析器")
     analyze_commands = analyze.add_subparsers(dest="analyzer", required=True)
-    for analyzer in ANALYZERS.values():
+    for analyzer_type in ANALYZERS.values():
+        analyzer = analyzer_type()
         analyzer_parser = analyze_commands.add_parser(analyzer.name, help=analyzer.description)
         _add_common(analyzer_parser)
         analyzer_parser.add_argument("--json", action="store_true", dest="as_json")
@@ -343,7 +345,7 @@ def _handle_runs(args: argparse.Namespace, config: Config) -> int:
 
 
 def _handle_analyze(args: argparse.Namespace, config: Config) -> int:
-    analyzer = ANALYZERS[args.analyzer]
+    analyzer = ANALYZERS[args.analyzer]()
     try:
         result = analyzer.analyze(AnalyzeContext(config, ProgressDisplay(args.progress)), args)
     except (OSError, ValueError) as exc:

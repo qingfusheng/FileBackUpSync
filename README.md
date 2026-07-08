@@ -193,6 +193,7 @@ runs list|failed             列出任务
 runs show RUN_ID             查看任务和失败详情
 analyze small-files          分析小文件热点
 analyze health               检查路径、权限和空间
+analyze ignored              检查 ignore 规则命中的文件和目录
 config path|list             查看配置位置或全部配置
 config get KEY               读取配置项
 config set KEY VALUE         验证并原子修改配置项
@@ -271,6 +272,7 @@ python3 main.py resume 20260706-204414-c28d631d
 ```bash
 python3 main.py analyze small-files
 python3 main.py analyze small-files --size 65536 --count 1000 --json
+python3 main.py analyze ignored --json
 ```
 
 若同一目录中小于等于阈值的文件数量达到设定值，会给出候选目录：
@@ -385,7 +387,8 @@ tests/                     CLI、配置和分析器测试
 - ✅ 原子配置管理命令
 - ✅ wheel / sdist 构建验证
 - ⏳ 独立 JSON 日志
-- ⏳ duplicates/ignored/integrity 分析器
+- ✅ ignored 分析器
+- ⏳ duplicates/integrity 分析器
 - ⏳ 自动化版本发布
 
 ## 当前状态

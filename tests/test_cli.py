@@ -123,6 +123,23 @@ class CliTests(unittest.TestCase):
         )
         self.assertEqual(code, 0)
 
+    def test_analyze_ignored_command(self):
+        self.config.write_text(
+            "\n".join(
+                [
+                    "[paths]",
+                    f'source = "{self.source}"',
+                    f'target = "{self.target}"',
+                    "[ignore]",
+                    'patterns = ["*.tmp"]',
+                ]
+            )
+        )
+        (self.source / "scratch.tmp").write_text("tmp")
+        code = main(["analyze", "ignored", "--config", str(self.config)])
+        self.assertEqual(code, 0)
+        self.assertFalse(any(self.target.iterdir()))
+
     def test_config_get_set_and_validate_commands(self):
         self.assertEqual(main(["config", "get", "paths.source", "--config", str(self.config)]), 0)
         self.assertEqual(

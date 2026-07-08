@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-import fnmatch
 import os
 from collections import Counter
 from collections.abc import Callable, Iterable
 from pathlib import Path
 
+from ..ignore_rules import matches_ignore, normalize_ignore_patterns
 from .models import FileInfo, Snapshot
 
 # 扫描进度回调：遍历到单个文件时触发，传入文件相对路径
@@ -31,7 +31,7 @@ def scan(
         raise ValueError(f"目录不存在或不可读: {str(root)!r}")
 
     # 过滤忽略规则：去空、去除注释行（#开头）
-    patterns = tuple(p.strip() for p in ignore if p.strip() and not p.lstrip().startswith("#"))
+    patterns = normalize_ignore_patterns(ignore)
 
     files: dict[Path, FileInfo] = {}  # key: 文件相对路径, value: 文件元数据
     directories: set[Path] = set()  # 所有子目录相对路径集合
@@ -61,7 +61,7 @@ def scan(
             relative = relative_dir / entry.name
 
             # 匹配忽略规则，直接跳过当前项
-            if _matches(relative, patterns):
+            if matches_ignore(relative, patterns):
                 continue
             # 跳过所有符号链接，不跟随软链
             if entry.is_symlink():
@@ -117,20 +117,4 @@ def empty_snapshot(root: Path) -> Snapshot:
         {},
         frozenset(),
         Counter(),
-    )
-
-
-def _matches(path: Path, patterns: Iterable[str]) -> bool:
-    """
-    内部忽略规则匹配函数
-    匹配逻辑二选一即命中：
-    1. 文件完整相对路径（POSIX格式）匹配通配符
-    2. 仅文件名匹配通配符
-    自动剔除规则末尾的斜杠，兼容目录匹配写法
-    """
-    value = path.as_posix()
-    return any(
-        fnmatch.fnmatchcase(value, pattern.rstrip("/"))
-        or fnmatch.fnmatchcase(path.name, pattern.rstrip("/"))
-        for pattern in patterns
     )
