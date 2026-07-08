@@ -38,7 +38,7 @@ class DuplicatesAnalyzer(Analyzer):
             "--path",
             type=Path,
             action="append",
-            default=(),
+            default=[],
             help="额外指定待分析目录，可重复传入",
         )
         parser.add_argument("--limit", type=int, default=20, help="最多展示的重复文件组数")

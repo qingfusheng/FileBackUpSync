@@ -38,7 +38,7 @@ class LargeFilesAnalyzer(Analyzer):
             "--path",
             type=Path,
             action="append",
-            default=(),
+            default=[],
             help="额外指定待分析目录，可重复传入",
         )
         parser.add_argument("--min-size", type=int, default=DEFAULT_MIN_SIZE, help="最小文件字节数")

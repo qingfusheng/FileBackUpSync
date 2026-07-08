@@ -154,6 +154,24 @@ class CliTests(unittest.TestCase):
         )
         self.assertEqual(code, 0)
 
+    def test_analyze_large_files_supports_extra_path(self):
+        extra = self.root / "extra"
+        extra.mkdir()
+        (extra / "big.bin").write_bytes(b"x" * 8)
+        code = main(
+            [
+                "analyze",
+                "large-files",
+                "--config",
+                str(self.config),
+                "--min-size",
+                "8",
+                "--path",
+                str(extra),
+            ]
+        )
+        self.assertEqual(code, 0)
+
     def test_analyze_symlinks_command(self):
         (self.source / "real.txt").write_text("content")
         try:
