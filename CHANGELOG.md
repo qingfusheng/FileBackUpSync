@@ -2,7 +2,7 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)；当前仍处于开发阶段。
 
-## 0.4.0 - 2026-07-08
+## 0.5.0 - 2026-07-08
 
 ### Changed
 
