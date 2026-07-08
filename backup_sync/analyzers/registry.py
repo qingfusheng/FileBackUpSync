@@ -7,6 +7,7 @@ from .ignored import IgnoredAnalyzer
 from .integrity import IntegrityAnalyzer
 from .large_files import LargeFilesAnalyzer
 from .small_files import SmallFilesAnalyzer
+from .symlinks import SymlinksAnalyzer
 
 ANALYZERS: dict[str, type[Analyzer]] = {
     "small-files": SmallFilesAnalyzer,
@@ -15,4 +16,5 @@ ANALYZERS: dict[str, type[Analyzer]] = {
     "duplicates": DuplicatesAnalyzer,
     "ignored": IgnoredAnalyzer,
     "integrity": IntegrityAnalyzer,
+    "symlinks": SymlinksAnalyzer,
 }

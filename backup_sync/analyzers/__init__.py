@@ -5,6 +5,7 @@ from .ignored import IgnoredAnalyzer
 from .integrity import IntegrityAnalyzer
 from .large_files import LargeFilesAnalyzer
 from .small_files import SmallFilesAnalyzer
+from .symlinks import SymlinksAnalyzer
 
 __all__ = [
     "AnalysisResult",
@@ -17,4 +18,5 @@ __all__ = [
     "IntegrityAnalyzer",
     "LargeFilesAnalyzer",
     "SmallFilesAnalyzer",
+    "SymlinksAnalyzer",
 ]

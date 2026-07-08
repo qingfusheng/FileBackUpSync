@@ -11,6 +11,7 @@ from backup_sync.analyzers.integrity import IntegrityAnalyzer
 from backup_sync.analyzers.large_files import LargeFilesAnalyzer
 from backup_sync.analyzers.registry import ANALYZERS
 from backup_sync.analyzers.small_files import SmallFilesAnalyzer
+from backup_sync.analyzers.symlinks import SymlinksAnalyzer
 from backup_sync.config import load_config
 from backup_sync.progress import ProgressDisplay
 
@@ -78,6 +79,7 @@ class AnalyzerTests(unittest.TestCase):
         self.assertIs(ANALYZERS["duplicates"], DuplicatesAnalyzer)
         self.assertIs(ANALYZERS["ignored"], IgnoredAnalyzer)
         self.assertIs(ANALYZERS["integrity"], IntegrityAnalyzer)
+        self.assertIs(ANALYZERS["symlinks"], SymlinksAnalyzer)
 
     def test_ignored_reports_matches_without_touching_target(self):
         self.config_path.write_text(
@@ -245,6 +247,43 @@ class AnalyzerTests(unittest.TestCase):
 
         self.assertEqual(result.summary["scope"], "target")
         self.assertEqual(result.findings[0].title, "target:large.bin")
+
+    def test_symlinks_reports_links_and_broken_links(self):
+        (self.source / "real.txt").write_text("content")
+        try:
+            (self.source / "ok-link").symlink_to("real.txt")
+            (self.source / "broken-link").symlink_to("missing.txt")
+        except OSError as exc:
+            self.skipTest(f"symlink unsupported: {exc}")
+
+        result = SymlinksAnalyzer().analyze(
+            self.context,
+            argparse.Namespace(scope="source", path=(), limit=10, broken_only=False),
+        )
+
+        self.assertEqual(result.summary["symlinks"], 2)
+        self.assertEqual(result.summary["broken"], 1)
+        self.assertEqual(
+            [finding.title for finding in result.findings],
+            ["source:broken-link", "source:ok-link"],
+        )
+
+    def test_symlinks_can_filter_broken_only(self):
+        (self.source / "real.txt").write_text("content")
+        try:
+            (self.source / "ok-link").symlink_to("real.txt")
+            (self.source / "broken-link").symlink_to("missing.txt")
+        except OSError as exc:
+            self.skipTest(f"symlink unsupported: {exc}")
+
+        result = SymlinksAnalyzer().analyze(
+            self.context,
+            argparse.Namespace(scope="source", path=(), limit=10, broken_only=True),
+        )
+
+        self.assertEqual(result.summary["symlinks"], 2)
+        self.assertEqual(result.summary["shown"], 1)
+        self.assertEqual(result.findings[0].title, "source:broken-link")
 
 
 if __name__ == "__main__":

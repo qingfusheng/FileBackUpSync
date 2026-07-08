@@ -154,6 +154,15 @@ class CliTests(unittest.TestCase):
         )
         self.assertEqual(code, 0)
 
+    def test_analyze_symlinks_command(self):
+        (self.source / "real.txt").write_text("content")
+        try:
+            (self.source / "link.txt").symlink_to("real.txt")
+        except OSError as exc:
+            self.skipTest(f"symlink unsupported: {exc}")
+        code = main(["analyze", "symlinks", "--config", str(self.config)])
+        self.assertEqual(code, 0)
+
     def test_analyze_duplicates_command(self):
         (self.source / "a.txt").write_text("same")
         (self.source / "b.txt").write_text("same")

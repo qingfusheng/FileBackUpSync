@@ -197,6 +197,7 @@ analyze large-files          找出大文件和空间占用热点
 analyze duplicates           按内容 hash 查找重复文件
 analyze ignored              检查 ignore 规则命中的文件和目录
 analyze integrity            按同路径文件 hash 校验源目录和目标目录一致性
+analyze symlinks             列出扫描时会跳过的符号链接
 config path|list             查看配置位置或全部配置
 config get KEY               读取配置项
 config set KEY VALUE         验证并原子修改配置项
@@ -278,6 +279,7 @@ python3 main.py analyze small-files --size 65536 --count 1000 --json
 python3 main.py analyze large-files --min-size 104857600
 python3 main.py analyze large-files --scope target --limit 50
 python3 main.py analyze ignored --json
+python3 main.py analyze symlinks --broken-only
 python3 main.py analyze duplicates --scope source --estimate-only
 python3 main.py analyze duplicates --scope target --yes --json
 python3 main.py analyze duplicates --path /Volumes/Archive --yes
@@ -297,7 +299,6 @@ python3 main.py analyze integrity --yes --json
 | `stale-files` | 轻量扫描 | 按 mtime 找长期未变化的归档候选 |
 | `empty-dirs` | 轻量扫描 | 找出源目录空目录和同步后可能残留目录 |
 | `name-conflicts` | 轻量扫描 | 检查大小写不敏感文件系统上的潜在冲突 |
-| `symlinks` | 轻量扫描 | 列出被扫描器跳过的符号链接 |
 | `permissions` | 轻量扫描 | 检查不可读文件、不可进入目录和特殊文件 |
 | `drift` | 中等 I/O | 比较源/目标文件数量、大小和 mtime 漂移 |
 | `recycle` | 轻量扫描 | 检查回收目录体积、旧 run 残留和清理建议 |
