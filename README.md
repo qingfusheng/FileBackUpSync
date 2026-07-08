@@ -193,6 +193,7 @@ runs list|failed             列出任务
 runs show RUN_ID             查看任务和失败详情
 analyze small-files          分析小文件热点
 analyze health               检查路径、权限和空间
+analyze large-files          找出大文件和空间占用热点
 analyze duplicates           按内容 hash 查找重复文件
 analyze ignored              检查 ignore 规则命中的文件和目录
 analyze integrity            按同路径文件 hash 校验源目录和目标目录一致性
@@ -274,6 +275,8 @@ python3 main.py resume 20260706-204414-c28d631d
 ```bash
 python3 main.py analyze small-files
 python3 main.py analyze small-files --size 65536 --count 1000 --json
+python3 main.py analyze large-files --min-size 104857600
+python3 main.py analyze large-files --scope target --limit 50
 python3 main.py analyze ignored --json
 python3 main.py analyze duplicates --scope source --estimate-only
 python3 main.py analyze duplicates --scope target --yes --json
@@ -291,7 +294,6 @@ python3 main.py analyze integrity --yes --json
 
 | 分析器 | 类型 | 用途 |
 | --- | --- | --- |
-| `large-files` | 轻量扫描 | 找出超大文件和空间占用热点 |
 | `stale-files` | 轻量扫描 | 按 mtime 找长期未变化的归档候选 |
 | `empty-dirs` | 轻量扫描 | 找出源目录空目录和同步后可能残留目录 |
 | `name-conflicts` | 轻量扫描 | 检查大小写不敏感文件系统上的潜在冲突 |

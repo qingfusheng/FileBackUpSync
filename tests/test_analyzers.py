@@ -8,6 +8,7 @@ from backup_sync.analyzers.duplicates import DuplicatesAnalyzer
 from backup_sync.analyzers.health import HealthAnalyzer
 from backup_sync.analyzers.ignored import IgnoredAnalyzer
 from backup_sync.analyzers.integrity import IntegrityAnalyzer
+from backup_sync.analyzers.large_files import LargeFilesAnalyzer
 from backup_sync.analyzers.registry import ANALYZERS
 from backup_sync.analyzers.small_files import SmallFilesAnalyzer
 from backup_sync.config import load_config
@@ -73,6 +74,7 @@ class AnalyzerTests(unittest.TestCase):
     def test_registry_uses_explicit_analyzer_classes(self):
         self.assertIs(ANALYZERS["small-files"], SmallFilesAnalyzer)
         self.assertIs(ANALYZERS["health"], HealthAnalyzer)
+        self.assertIs(ANALYZERS["large-files"], LargeFilesAnalyzer)
         self.assertIs(ANALYZERS["duplicates"], DuplicatesAnalyzer)
         self.assertIs(ANALYZERS["ignored"], IgnoredAnalyzer)
         self.assertIs(ANALYZERS["integrity"], IntegrityAnalyzer)
@@ -216,6 +218,33 @@ class AnalyzerTests(unittest.TestCase):
 
         self.assertIsNone(result.summary["hash_mismatches"])
         self.assertEqual(result.summary["estimated_hash_bytes"], 8)
+
+    def test_large_files_reports_largest_source_files(self):
+        (self.source / "small.bin").write_bytes(b"x" * 3)
+        (self.source / "large.bin").write_bytes(b"x" * 8)
+        (self.source / "larger.bin").write_bytes(b"x" * 10)
+
+        result = LargeFilesAnalyzer().analyze(
+            self.context,
+            argparse.Namespace(scope="source", path=(), min_size=8, limit=10),
+        )
+
+        self.assertEqual(result.summary["large_files"], 2)
+        self.assertEqual(
+            [finding.title for finding in result.findings],
+            ["source:larger.bin", "source:large.bin"],
+        )
+
+    def test_large_files_can_scan_target(self):
+        (self.target / "large.bin").write_bytes(b"x" * 8)
+
+        result = LargeFilesAnalyzer().analyze(
+            self.context,
+            argparse.Namespace(scope="target", path=(), min_size=8, limit=10),
+        )
+
+        self.assertEqual(result.summary["scope"], "target")
+        self.assertEqual(result.findings[0].title, "target:large.bin")
 
 
 if __name__ == "__main__":

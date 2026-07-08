@@ -3,6 +3,7 @@ from .duplicates import DuplicatesAnalyzer
 from .health import HealthAnalyzer
 from .ignored import IgnoredAnalyzer
 from .integrity import IntegrityAnalyzer
+from .large_files import LargeFilesAnalyzer
 from .small_files import SmallFilesAnalyzer
 
 __all__ = [
@@ -14,5 +15,6 @@ __all__ = [
     "HealthAnalyzer",
     "IgnoredAnalyzer",
     "IntegrityAnalyzer",
+    "LargeFilesAnalyzer",
     "SmallFilesAnalyzer",
 ]

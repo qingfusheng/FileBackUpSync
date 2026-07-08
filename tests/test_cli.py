@@ -140,6 +140,20 @@ class CliTests(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertFalse(any(self.target.iterdir()))
 
+    def test_analyze_large_files_command(self):
+        (self.source / "large.bin").write_bytes(b"x" * 8)
+        code = main(
+            [
+                "analyze",
+                "large-files",
+                "--config",
+                str(self.config),
+                "--min-size",
+                "8",
+            ]
+        )
+        self.assertEqual(code, 0)
+
     def test_analyze_duplicates_command(self):
         (self.source / "a.txt").write_text("same")
         (self.source / "b.txt").write_text("same")
