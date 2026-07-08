@@ -8,10 +8,13 @@
 
 ![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)
 ![Status](https://img.shields.io/badge/status-active_development-2ea44f)
+[![PyPI](https://img.shields.io/pypi/v/file-backup-sync.svg)](https://pypi.org/project/file-backup-sync/)
 [![CI](https://github.com/qingfusheng/FileBackUpSync/actions/workflows/ci.yml/badge.svg)](https://github.com/qingfusheng/FileBackUpSync/actions/workflows/ci.yml)
 ![Tests](https://img.shields.io/badge/tests-51_passing-2ea44f)
 
-[快速开始](#快速开始) · [配置说明](#配置说明) · [安全设计](#安全设计) · [更新记录](CHANGELOG.md)
+[快速开始](#快速开始) · [配置说明](#配置说明) · [安全设计](#安全设计) · [PyPI](https://pypi.org/project/file-backup-sync/) · [GitHub Repo](https://github.com/qingfusheng/FileBackUpSync) · [更新记录](CHANGELOG.md)
+
+项目地址：<https://github.com/qingfusheng/FileBackUpSync>
 
 </div>
 
@@ -369,21 +372,21 @@ tests/                     CLI、配置和分析器测试
 
 ## 路线图
 
-- [x] 默认预览与显式执行
-- [x] 内容级 rename 检测
-- [x] 回收站与目录对齐
-- [x] 小文件热点预检
-- [x] 原子复制与复制后校验
-- [x] 失败重试、run_id 和 JSON 摘要
-- [x] checkpoint 与中断恢复
-- [x] ruff、mypy、覆盖率和 CI
-- [x] plan/sync/resume/runs 子命令
-- [x] 可扩展 analyze 框架
-- [x] 原子配置管理命令
-- [x] wheel / sdist 构建验证
-- [ ] 独立 JSON 日志
-- [ ] duplicates/ignored/integrity 分析器
-- [ ] 自动化版本发布
+- ✅ 默认预览与显式执行
+- ✅ 内容级 rename 检测
+- ✅ 回收站与目录对齐
+- ✅ 小文件热点预检
+- ✅ 原子复制与复制后校验
+- ✅ 失败重试、run_id 和 JSON 摘要
+- ✅ checkpoint 与中断恢复
+- ✅ ruff、mypy、覆盖率和 CI
+- ✅ plan/sync/resume/runs 子命令
+- ✅ 可扩展 analyze 框架
+- ✅ 原子配置管理命令
+- ✅ wheel / sdist 构建验证
+- ⏳ 独立 JSON 日志
+- ⏳ duplicates/ignored/integrity 分析器
+- ⏳ 自动化版本发布
 
 ## 当前状态
 
