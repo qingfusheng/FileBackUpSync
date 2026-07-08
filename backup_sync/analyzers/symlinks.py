@@ -87,11 +87,7 @@ class SymlinksAnalyzer(Analyzer):
     ) -> list[SymlinkEntry]:
         explicit_paths = getattr(args, "path", None)
         if explicit_paths:
-            paths = (
-                (explicit_paths,)
-                if isinstance(explicit_paths, Path)
-                else tuple(explicit_paths)
-            )
+            paths = (explicit_paths,) if isinstance(explicit_paths, Path) else tuple(explicit_paths)
             roots = [
                 (f"path{index}", path.expanduser().resolve(), ())
                 for index, path in enumerate(paths, start=1)
