@@ -10,7 +10,7 @@
 ![Status](https://img.shields.io/badge/status-active_development-2ea44f)
 [![PyPI](https://img.shields.io/pypi/v/file-backup-sync.svg)](https://pypi.org/project/file-backup-sync/)
 [![CI](https://github.com/qingfusheng/FileBackUpSync/actions/workflows/ci.yml/badge.svg)](https://github.com/qingfusheng/FileBackUpSync/actions/workflows/ci.yml)
-![Tests](https://img.shields.io/badge/tests-51_passing-2ea44f)
+![Tests](https://img.shields.io/badge/tests-66_passing-2ea44f)
 
 [快速开始](#快速开始) · [配置说明](#配置说明) · [安全设计](#安全设计) · [PyPI](https://pypi.org/project/file-backup-sync/) · [GitHub Repo](https://github.com/qingfusheng/FileBackUpSync) · [更新记录](CHANGELOG.md)
 

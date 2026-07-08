@@ -2,6 +2,19 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)；当前仍处于开发阶段。
 
+## 0.6.0 - 2026-07-08
+
+### Added
+
+- 新增 `analyze large-files` 分析器，按大小列出空间占用最高的文件。
+- 新增 `analyze duplicates` 分析器，支持按内容 hash 检测重复文件（含估算模式）。
+- 新增 `analyze integrity` 分析器，支持按同路径文件进行源/目标内容一致性校验（含估算模式）。
+
+### Changed
+
+- `analyze` 子命令切换为显式注册机制，扩展新分析器时的接入路径更稳定。
+- `analyze ignored` 增强为可输出命中文件与目录明细，并补充对应 CLI/测试覆盖。
+
 ## 0.5.0 - 2026-07-08
 
 ### Changed
