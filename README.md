@@ -9,7 +9,7 @@
 ![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)
 ![Status](https://img.shields.io/badge/status-active_development-2ea44f)
 [![CI](https://github.com/qingfusheng/FileBackUpSync/actions/workflows/ci.yml/badge.svg)](https://github.com/qingfusheng/FileBackUpSync/actions/workflows/ci.yml)
-![Tests](https://img.shields.io/badge/tests-49_passing-2ea44f)
+![Tests](https://img.shields.io/badge/tests-51_passing-2ea44f)
 
 [快速开始](#快速开始) · [配置说明](#配置说明) · [安全设计](#安全设计) · [更新记录](CHANGELOG.md)
 
@@ -120,7 +120,15 @@ backup-sync plan --config backup.toml
 backup-sync sync --config backup.toml
 ```
 
-运行依赖（`tomlkit`、`tqdm`）统一声明在 `pyproject.toml`，安装项目时会自动解析，不需要单独维护 `requirements.txt`。
+运行依赖（`blake3`、`tomlkit`、`tqdm`）统一声明在 `pyproject.toml`，安装项目时会自动解析，不需要单独维护 `requirements.txt`。
+
+需要在 Python 中组合扫描、规划和执行能力时，使用稳定公共入口：
+
+```python
+from backup_sync.sync import build_plan, execute, scan
+```
+
+内部的 `storage` 和 `runs` 包分别负责底层文件系统能力与运行记录持久化；业务代码不应再导入已删除的 `backup_sync.core`。
 
 ## 配置说明
 
@@ -334,6 +342,7 @@ GitHub Actions 会在 Python 3.11、3.12 和 3.13 上运行测试，并要求核
 - 子命令确认策略、任务发现和失败详情
 - Analyzer 抽象接口与 registry
 - 配置读取、原子修改及文件系统校验
+- macOS immutable (`uchg`) 文件的替换、移动与删除
 
 项目入口：
 
@@ -346,11 +355,16 @@ MANIFEST.in             源码发布包附加文件清单
 backup_sync/cli.py      命令行和计划展示
 backup_sync/config.py   TOML 配置读取与路径校验
 backup_sync/config_manager.py  配置查询、原子修改与验证
-backup_sync/core.py     扫描、规划和执行核心
-backup_sync/checkpoint.py  运行状态与恢复信息
-backup_sync/reporting.py   JSON 运行报告
+backup_sync/formatting.py  通用显示格式化
+backup_sync/progress.py    终端进度显示
+backup_sync/sync/          扫描、计划、动作执行与领域模型
+backup_sync/storage/       指纹、归档、原子文件操作与平台保护属性
+backup_sync/runs/          checkpoint 与 JSON 运行报告
 backup_sync/analyzers/     可扩展只读分析器
-tests/                  回归测试
+tests/sync/                同步领域回归测试
+tests/storage/             文件系统与指纹测试
+tests/runs/                运行报告测试
+tests/                     CLI、配置和分析器测试
 ```
 
 ## 路线图

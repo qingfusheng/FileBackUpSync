@@ -5,7 +5,7 @@ import os
 import shutil
 from pathlib import Path
 
-from ..core import format_size
+from ..formatting import format_size
 from .base import AnalysisResult, AnalyzeContext, Analyzer, Finding
 
 

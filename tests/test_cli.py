@@ -46,7 +46,7 @@ class CliTests(unittest.TestCase):
 
     def test_partial_failure_can_resume_with_fresh_plan(self):
         (self.source / "file.txt").write_text("content")
-        with patch("backup_sync.core._verify_copy", side_effect=OSError("simulated")):
+        with patch("backup_sync.sync.operations.verify_copy", side_effect=OSError("simulated")):
             first_code = main(["sync", "--config", str(self.config), "--yes"])
         self.assertEqual(first_code, 1)
         state_path = next((self.root / ".backup-sync/state").glob("*.json"))

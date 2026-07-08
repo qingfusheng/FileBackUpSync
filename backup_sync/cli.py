@@ -13,7 +13,6 @@ from pathlib import Path
 from tomlkit.exceptions import ParseError
 
 from .analyzers import ANALYZERS, AnalyzeContext
-from .checkpoint import Checkpoint, RunRecord, list_runs
 from .config import Config, load_config
 from .config_manager import (
     ConfigCheck,
@@ -23,7 +22,11 @@ from .config_manager import (
     update_file,
     validate_file,
 )
-from .core import (
+from .formatting import format_size
+from .progress import ProgressDisplay
+from .runs import Checkpoint, RunRecord, build_report, list_runs, new_run_id, write_json_atomic
+from .storage.fingerprint import FingerprintEngine, FingerprintStats
+from .sync import (
     ActionKind,
     ActionResult,
     Plan,
@@ -32,12 +35,8 @@ from .core import (
     build_plan,
     empty_snapshot,
     execute,
-    format_size,
     scan,
 )
-from .fingerprint import FingerprintEngine, FingerprintStats
-from .progress import ProgressDisplay
-from .reporting import build_report, new_run_id, write_json_atomic
 
 
 @dataclass(frozen=True)

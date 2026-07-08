@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Literal
 from blake3 import blake3
 
 if TYPE_CHECKING:
-    from .core import FileInfo
+    from ..sync.models import FileInfo
 
 LOGGER = logging.getLogger(__name__)
 FingerprintKind = Literal["quick", "strong"]
@@ -246,3 +246,7 @@ def _identity(relative: Path, info: FileInfo) -> str:
     if info.inode:
         return f"inode:{info.device}:{info.inode}"
     return f"path:{relative.as_posix()}"
+
+
+def file_digest(path: Path) -> str:
+    return strong_digest(path)[0]

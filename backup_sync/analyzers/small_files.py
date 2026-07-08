@@ -4,7 +4,8 @@ import argparse
 from collections import defaultdict
 from pathlib import Path
 
-from ..core import format_size, scan
+from ..formatting import format_size
+from ..sync import scan
 from .base import AnalysisResult, AnalyzeContext, Analyzer, Finding
 
 

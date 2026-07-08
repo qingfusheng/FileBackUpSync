@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from .core import ActionResult
+from ..sync.models import ActionResult
 from .reporting import write_json_atomic
 
 

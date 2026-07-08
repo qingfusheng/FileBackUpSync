@@ -4,8 +4,8 @@ import unittest
 from datetime import datetime
 from pathlib import Path
 
-from backup_sync.core import VerifyMode, build_plan, execute, scan
-from backup_sync.reporting import build_report, write_json_atomic
+from backup_sync.runs.reporting import build_report, write_json_atomic
+from backup_sync.sync import VerifyMode, build_plan, execute, scan
 
 
 class ReportingTests(unittest.TestCase):

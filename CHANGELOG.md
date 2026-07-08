@@ -2,6 +2,22 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)；当前仍处于开发阶段。
 
+## 0.4.0 - 2026-07-08
+
+### Changed
+
+- 按 `sync`、`storage`、`runs` 领域重组内部模块和对应测试。
+- 文件写入、替换、移动和删除统一通过平台安全文件操作层执行。
+
+### Added
+
+- 支持在 macOS 修改目标文件前清除用户 immutable (`uchg`) 标记。
+
+### Removed
+
+- 删除完成拆分后不再承担职责的 `core.py` 兼容模块。
+- Python API 调用方应改用 `backup_sync.sync` 中的稳定公共入口。
+
 ## 0.3.0 - 2026-07-07
 
 ### Added

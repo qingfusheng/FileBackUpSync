@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from backup_sync.core import ActionKind, VerifyMode, build_plan, execute, scan
+from backup_sync.sync import ActionKind, VerifyMode, build_plan, execute, scan
 
 
 class SyncTests(unittest.TestCase):
@@ -94,7 +94,7 @@ class SyncTests(unittest.TestCase):
         (self.source / "important.txt").write_text("new")
         (self.target / "important.txt").write_text("old")
         source, target = self.snapshots()
-        with patch("backup_sync.core._verify_copy", side_effect=OSError("bad copy")):
+        with patch("backup_sync.sync.operations.verify_copy", side_effect=OSError("bad copy")):
             result = execute(
                 build_plan(source, target),
                 source,
@@ -110,9 +110,9 @@ class SyncTests(unittest.TestCase):
     def test_copy_retries_and_reports_attempt_count(self):
         (self.source / "file.txt").write_text("content")
         source, target = self.snapshots()
-        import backup_sync.core as core
+        import backup_sync.storage.fileops as fileops
 
-        real_copy = core.shutil.copy2
+        real_copy = fileops.shutil.copy2
         calls = 0
 
         def flaky_copy(*args, **kwargs):
@@ -123,8 +123,8 @@ class SyncTests(unittest.TestCase):
             return real_copy(*args, **kwargs)
 
         with (
-            patch("backup_sync.core.shutil.copy2", side_effect=flaky_copy),
-            patch("backup_sync.core.time.sleep"),
+            patch("backup_sync.storage.fileops.shutil.copy2", side_effect=flaky_copy),
+            patch("backup_sync.sync.executor.time.sleep"),
         ):
             result = execute(
                 build_plan(source, target),
@@ -143,7 +143,7 @@ class SyncTests(unittest.TestCase):
         (self.source / "important.txt").write_text("new")
         (self.target / "important.txt").write_text("old")
         source, target = self.snapshots()
-        with patch("backup_sync.core.os.replace", side_effect=OSError("replace failed")):
+        with patch("backup_sync.storage.fileops.os.replace", side_effect=OSError("replace failed")):
             result = execute(
                 build_plan(source, target),
                 source,
@@ -198,7 +198,7 @@ class SyncTests(unittest.TestCase):
         source, target = self.snapshots()
 
         with patch(
-            "backup_sync.fingerprint.FingerprintEngine.strong",
+            "backup_sync.storage.fingerprint.FingerprintEngine.strong",
             side_effect=AssertionError("hash called"),
         ):
             plan = build_plan(source, target, compare_mode="smart")

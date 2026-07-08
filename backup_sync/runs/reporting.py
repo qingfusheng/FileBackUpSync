@@ -7,8 +7,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from .core import ExecutionResult, Plan, Snapshot, VerifyMode
-from .fingerprint import FingerprintStats
+from ..storage.fingerprint import FingerprintStats
+from ..sync.models import ExecutionResult, Plan, Snapshot, VerifyMode
 
 
 def new_run_id() -> str:

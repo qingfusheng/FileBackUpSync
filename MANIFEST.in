@@ -1,2 +1,3 @@
 include CHANGELOG.md
 include backup.example.toml
+recursive-include tests *.py

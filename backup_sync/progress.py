@@ -7,7 +7,7 @@ from typing import Any
 
 from tqdm import tqdm
 
-from .core import Action, ActionResult
+from .sync.models import Action, ActionResult
 
 
 class ProgressDisplay:

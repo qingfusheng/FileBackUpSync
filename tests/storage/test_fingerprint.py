@@ -3,8 +3,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from backup_sync.core import ActionKind, build_plan, scan
-from backup_sync.fingerprint import SAMPLE_SIZE, FingerprintEngine
+from backup_sync.storage.fingerprint import SAMPLE_SIZE, FingerprintEngine
+from backup_sync.sync import ActionKind, build_plan, scan
 
 
 class FingerprintTests(unittest.TestCase):
