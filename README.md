@@ -193,7 +193,9 @@ runs list|failed             列出任务
 runs show RUN_ID             查看任务和失败详情
 analyze small-files          分析小文件热点
 analyze health               检查路径、权限和空间
+analyze duplicates           按内容 hash 查找重复文件
 analyze ignored              检查 ignore 规则命中的文件和目录
+analyze integrity            按同路径文件 hash 校验源目录和目标目录一致性
 config path|list             查看配置位置或全部配置
 config get KEY               读取配置项
 config set KEY VALUE         验证并原子修改配置项
@@ -273,7 +275,32 @@ python3 main.py resume 20260706-204414-c28d631d
 python3 main.py analyze small-files
 python3 main.py analyze small-files --size 65536 --count 1000 --json
 python3 main.py analyze ignored --json
+python3 main.py analyze duplicates --scope source --estimate-only
+python3 main.py analyze duplicates --scope target --yes --json
+python3 main.py analyze duplicates --path /Volumes/Archive --yes
+python3 main.py analyze integrity --estimate-only
+python3 main.py analyze integrity --yes --json
 ```
+
+`duplicates` 和 `integrity` 会读取文件内容计算 hash。建议先使用 `--estimate-only`
+查看预计读取量，确认后再添加 `--yes` 执行完整检测。
+`duplicates` 默认分析源目录，可通过 `--scope source|target` 切换范围，
+也可重复传入 `--path DIR` 额外指定目录。
+
+后续可扩展的分析器方向：
+
+| 分析器 | 类型 | 用途 |
+| --- | --- | --- |
+| `large-files` | 轻量扫描 | 找出超大文件和空间占用热点 |
+| `stale-files` | 轻量扫描 | 按 mtime 找长期未变化的归档候选 |
+| `empty-dirs` | 轻量扫描 | 找出源目录空目录和同步后可能残留目录 |
+| `name-conflicts` | 轻量扫描 | 检查大小写不敏感文件系统上的潜在冲突 |
+| `symlinks` | 轻量扫描 | 列出被扫描器跳过的符号链接 |
+| `permissions` | 轻量扫描 | 检查不可读文件、不可进入目录和特殊文件 |
+| `drift` | 中等 I/O | 比较源/目标文件数量、大小和 mtime 漂移 |
+| `recycle` | 轻量扫描 | 检查回收目录体积、旧 run 残留和清理建议 |
+| `cache` | 轻量扫描 | 检查指纹缓存位置、大小和可用性 |
+| `hash-sample` | 重 I/O | 抽样 hash 校验目标文件内容 |
 
 若同一目录中小于等于阈值的文件数量达到设定值，会给出候选目录：
 
@@ -388,7 +415,7 @@ tests/                     CLI、配置和分析器测试
 - ✅ wheel / sdist 构建验证
 - ⏳ 独立 JSON 日志
 - ✅ ignored 分析器
-- ⏳ duplicates/integrity 分析器
+- ✅ duplicates/integrity 分析器
 - ⏳ 自动化版本发布
 
 ## 当前状态

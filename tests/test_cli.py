@@ -140,6 +140,34 @@ class CliTests(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertFalse(any(self.target.iterdir()))
 
+    def test_analyze_duplicates_command(self):
+        (self.source / "a.txt").write_text("same")
+        (self.source / "b.txt").write_text("same")
+        code = main(["analyze", "duplicates", "--config", str(self.config), "--yes"])
+        self.assertEqual(code, 0)
+
+    def test_analyze_duplicates_target_scope_command(self):
+        (self.target / "a.txt").write_text("same")
+        (self.target / "b.txt").write_text("same")
+        code = main(
+            [
+                "analyze",
+                "duplicates",
+                "--config",
+                str(self.config),
+                "--scope",
+                "target",
+                "--yes",
+            ]
+        )
+        self.assertEqual(code, 0)
+
+    def test_analyze_integrity_estimate_command(self):
+        (self.source / "file.txt").write_text("content")
+        (self.target / "file.txt").write_text("content")
+        code = main(["analyze", "integrity", "--config", str(self.config), "--estimate-only"])
+        self.assertEqual(code, 0)
+
     def test_config_get_set_and_validate_commands(self):
         self.assertEqual(main(["config", "get", "paths.source", "--config", str(self.config)]), 0)
         self.assertEqual(

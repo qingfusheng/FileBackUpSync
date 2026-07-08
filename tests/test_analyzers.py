@@ -4,8 +4,10 @@ import unittest
 from pathlib import Path
 
 from backup_sync.analyzers.base import AnalysisResult, AnalyzeContext, Analyzer
+from backup_sync.analyzers.duplicates import DuplicatesAnalyzer
 from backup_sync.analyzers.health import HealthAnalyzer
 from backup_sync.analyzers.ignored import IgnoredAnalyzer
+from backup_sync.analyzers.integrity import IntegrityAnalyzer
 from backup_sync.analyzers.registry import ANALYZERS
 from backup_sync.analyzers.small_files import SmallFilesAnalyzer
 from backup_sync.config import load_config
@@ -71,6 +73,9 @@ class AnalyzerTests(unittest.TestCase):
     def test_registry_uses_explicit_analyzer_classes(self):
         self.assertIs(ANALYZERS["small-files"], SmallFilesAnalyzer)
         self.assertIs(ANALYZERS["health"], HealthAnalyzer)
+        self.assertIs(ANALYZERS["duplicates"], DuplicatesAnalyzer)
+        self.assertIs(ANALYZERS["ignored"], IgnoredAnalyzer)
+        self.assertIs(ANALYZERS["integrity"], IntegrityAnalyzer)
 
     def test_ignored_reports_matches_without_touching_target(self):
         self.config_path.write_text(
@@ -98,6 +103,119 @@ class AnalyzerTests(unittest.TestCase):
         self.assertEqual(result.summary["ignored_directories"], 1)
         self.assertEqual({finding.title for finding in result.findings}, {"scratch.tmp", "cache"})
         self.assertEqual(set(self.target.iterdir()), before_target)
+
+    def test_duplicates_reports_matching_content(self):
+        (self.source / "a.txt").write_text("same")
+        (self.source / "b.txt").write_text("same")
+        (self.source / "c.txt").write_text("different")
+
+        result = DuplicatesAnalyzer().analyze(
+            self.context,
+            argparse.Namespace(
+                scope="source",
+                path=(),
+                limit=10,
+                min_size=1,
+                estimate_only=False,
+                yes=True,
+            ),
+        )
+
+        self.assertEqual(result.summary["duplicate_groups"], 1)
+        self.assertEqual(result.summary["duplicate_files"], 2)
+        self.assertEqual(
+            set(result.findings[0].details["paths"]),
+            {"source:a.txt", "source:b.txt"},
+        )
+
+    def test_duplicates_can_scan_target(self):
+        (self.target / "a.txt").write_text("same")
+        (self.target / "b.txt").write_text("same")
+
+        result = DuplicatesAnalyzer().analyze(
+            self.context,
+            argparse.Namespace(
+                scope="target",
+                path=(),
+                limit=10,
+                min_size=1,
+                estimate_only=False,
+                yes=True,
+            ),
+        )
+
+        self.assertEqual(result.summary["scope"], "target")
+        self.assertEqual(result.summary["duplicate_groups"], 1)
+        self.assertEqual(
+            set(result.findings[0].details["paths"]),
+            {"target:a.txt", "target:b.txt"},
+        )
+
+    def test_duplicates_can_scan_explicit_path(self):
+        extra = self.root / "extra"
+        extra.mkdir()
+        (extra / "a.txt").write_text("same")
+        (extra / "b.txt").write_text("same")
+
+        result = DuplicatesAnalyzer().analyze(
+            self.context,
+            argparse.Namespace(
+                scope="source",
+                path=(extra,),
+                limit=10,
+                min_size=1,
+                estimate_only=False,
+                yes=True,
+            ),
+        )
+
+        self.assertEqual(result.summary["paths"], [str(extra)])
+        self.assertEqual(result.summary["duplicate_groups"], 1)
+        self.assertTrue(
+            {"path1:a.txt", "path1:b.txt"}.issubset(result.findings[0].details["paths"])
+        )
+
+    def test_duplicates_requires_confirmation_for_hashing(self):
+        (self.source / "a.txt").write_text("same")
+        (self.source / "b.txt").write_text("same")
+
+        with self.assertRaises(ValueError):
+            DuplicatesAnalyzer().analyze(
+                self.context,
+                argparse.Namespace(
+                    scope="source",
+                    path=(),
+                    limit=10,
+                    min_size=1,
+                    estimate_only=False,
+                    yes=False,
+                ),
+            )
+
+    def test_integrity_reports_hash_mismatch(self):
+        (self.source / "same-size.txt").write_text("left")
+        (self.target / "same-size.txt").write_text("rift")
+
+        result = IntegrityAnalyzer().analyze(
+            self.context,
+            argparse.Namespace(limit=10, estimate_only=False, yes=True),
+        )
+
+        self.assertFalse(result.summary["healthy"])
+        self.assertEqual(result.summary["hash_mismatches"], 1)
+        self.assertEqual(result.findings[0].details["issue"], "hash-mismatch")
+
+    def test_integrity_estimate_only_skips_hashing(self):
+        (self.source / "file.txt").write_text("left")
+        (self.target / "file.txt").write_text("left")
+
+        result = IntegrityAnalyzer().analyze(
+            self.context,
+            argparse.Namespace(limit=10, estimate_only=True, yes=False),
+        )
+
+        self.assertIsNone(result.summary["hash_mismatches"])
+        self.assertEqual(result.summary["estimated_hash_bytes"], 8)
 
 
 if __name__ == "__main__":
