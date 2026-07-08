@@ -204,8 +204,7 @@ class DuplicatesAnalyzer(Analyzer):
                 print(f"提示: {warning}")
             return
         print(
-            f"发现 {summary['duplicate_groups']} 个重复组，"
-            f"可节省约 {summary['duplicate_size']}。"
+            f"发现 {summary['duplicate_groups']} 个重复组，可节省约 {summary['duplicate_size']}。"
         )
         for finding in result.findings:
             print(
