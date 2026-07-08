@@ -40,7 +40,7 @@
 | 🔁 重试与恢复 | 单文件指数退避重试，checkpoint 支持中断后重新规划并继续 |
 | 📊 运行报告 | 每次执行生成 `run_id` 和可机器读取的 JSON 摘要 |
 | 📈 全流程进度 | 扫描、内容比较、rename 指纹计算和执行阶段均显示实时进度 |
-| 🧰 可扩展分析器 | `analyze small-files/health` 提供统一只读诊断能力 |
+| 🧰 可扩展分析器 | `analyze small-files/health` 提供统一只读诊断能力，并支持显式路径分析 |
 | ⚙️ 安全配置管理 | `config get/set/validate` 原子更新配置并校验路径与权限 |
 | ⚙️ 无路径硬编码 | 源、目标、回收目录和扫描策略统一由 TOML 配置 |
 | 🛡️ 边界保护 | 拒绝互相嵌套的源/目标路径，跳过符号链接，保留异常非空目录 |
@@ -83,7 +83,7 @@ unchanged 内容完全一致，无需操作
 cp backup.example.toml backup.toml
 ```
 
-编辑 `backup.toml`，至少设置源目录和目标目录：
+保持 `backup.toml` 位于当前工作目录，或者在执行时显式传入 `--config` 指向它；程序不会自动搜索其他目录。至少设置源目录和目标目录：
 
 ```toml
 [paths]
@@ -186,25 +186,28 @@ fingerprint_cache = ".backup-sync/fingerprints.sqlite3"
 ### 命令结构
 
 ```text
-plan                         生成只读同步计划
-sync [--yes]                 确认后执行；--yes 跳过确认
-resume RUN_ID [--yes]        恢复失败或中断任务
-runs list|failed             列出任务
-runs show RUN_ID             查看任务和失败详情
-analyze small-files          分析小文件热点
-analyze health               检查路径、权限和空间
-analyze large-files          找出大文件和空间占用热点
-analyze duplicates           按内容 hash 查找重复文件
-analyze ignored              检查 ignore 规则命中的文件和目录
-analyze integrity            按同路径文件 hash 校验源目录和目标目录一致性
-analyze symlinks             列出扫描时会跳过的符号链接
-config path|list             查看配置位置或全部配置
-config get KEY               读取配置项
-config set KEY VALUE         验证并原子修改配置项
-config validate              校验配置和文件系统
+plan                              生成只读同步计划
+sync [--yes]                      确认后执行；--yes 跳过确认
+resume RUN_ID [--yes]             恢复失败或中断任务
+runs list|failed                  列出任务
+runs show RUN_ID                  查看任务和失败详情
+analyze small-files [--path DIR]  分析小文件热点
+analyze health                    检查路径、权限和空间
+analyze large-files (--scope S | --path DIR)
+                                  找出大文件和空间占用热点
+analyze duplicates (--scope S | --path DIR)
+                                  按内容 hash 查找重复文件
+analyze ignored [--path DIR]      检查 ignore 规则命中的文件和目录
+analyze integrity                 按同路径文件 hash 校验源目录和目标目录一致性
+analyze symlinks (--scope S | --path DIR)
+                                  列出扫描时会跳过的符号链接
+config path|list                  查看配置位置或全部配置；配置文件必须真实存在
+config get KEY                    读取配置项
+config set KEY VALUE              验证并原子修改配置项
+config validate                   校验配置和文件系统
 ```
 
-各子命令接受 `--config PATH`、`--progress auto|always|never` 和 `--verbose`。`plan`、`sync` 还支持 `--compare smart|hash` 与 `--no-renames`。
+各子命令接受 `--config PATH`、`--progress auto|always|never` 和 `--verbose`。`--config` 默认是当前工作目录下的 `backup.toml`，该文件必须存在。`plan`、`sync` 还支持 `--compare smart|hash` 与 `--no-renames`。
 
 配置示例：
 
@@ -214,7 +217,7 @@ backup-sync config set paths.source "/Volumes/Data/Documents"
 backup-sync config validate
 ```
 
-`config set` 会保留 TOML 注释和格式，先写临时文件并完成完整校验，成功后才原子替换原配置。
+`config path` 只会返回实际存在的配置文件路径，找不到时会报错。`config set` 会保留 TOML 注释和格式，先写临时文件并完成完整校验，成功后才原子替换原配置。
 
 ### 校验与失败重试
 
@@ -275,10 +278,13 @@ python3 main.py resume 20260706-204414-c28d631d
 
 ```bash
 python3 main.py analyze small-files
+python3 main.py analyze small-files --path /Volumes/Archive
 python3 main.py analyze small-files --size 65536 --count 1000 --json
 python3 main.py analyze large-files --min-size 104857600
 python3 main.py analyze large-files --scope target --limit 50
+python3 main.py analyze large-files --path /Volumes/Archive --limit 50
 python3 main.py analyze ignored --json
+python3 main.py analyze ignored --path /Volumes/Archive --json
 python3 main.py analyze symlinks --broken-only
 python3 main.py analyze duplicates --scope source --estimate-only
 python3 main.py analyze duplicates --scope target --yes --json
@@ -289,8 +295,8 @@ python3 main.py analyze integrity --yes --json
 
 `duplicates` 和 `integrity` 会读取文件内容计算 hash。建议先使用 `--estimate-only`
 查看预计读取量，确认后再添加 `--yes` 执行完整检测。
-`duplicates` 默认分析源目录，可通过 `--scope source|target` 切换范围，
-也可重复传入 `--path DIR` 额外指定目录。
+`large-files`、`duplicates` 和 `symlinks` 需要在 `--scope source|target` 与 `--path DIR` 之间二选一。
+`small-files` 和 `ignored` 支持可选 `--path DIR`；不传时仍按配置中的 `source` 扫描。
 
 后续可扩展的分析器方向：
 

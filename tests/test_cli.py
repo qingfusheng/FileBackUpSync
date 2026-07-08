@@ -267,6 +267,11 @@ class CliTests(unittest.TestCase):
         )
         self.assertEqual(main(["config", "validate", "--config", str(self.config)]), 0)
 
+    def test_config_path_fails_when_missing(self):
+        missing = self.root / "missing.toml"
+        code = main(["config", "path", "--config", str(missing)])
+        self.assertEqual(code, 2)
+
 
 if __name__ == "__main__":
     unittest.main()

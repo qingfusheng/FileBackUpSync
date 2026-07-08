@@ -50,7 +50,12 @@ class PlannedSync:
 
 
 def _add_common(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--config", type=Path, default=Path("backup.toml"), help="TOML 配置文件")
+    parser.add_argument(
+        "--config",
+        type=Path,
+        default=Path("backup.toml"),
+        help="TOML 配置文件",
+    )
     parser.add_argument(
         "--progress",
         choices=("auto", "always", "never"),
@@ -126,7 +131,16 @@ def parser() -> argparse.ArgumentParser:
 
 
 def _load(path: Path) -> Config:
-    return load_config(path)
+    return load_config(_resolve_config_path(path))
+
+
+def _resolve_config_path(path: Path) -> Path:
+    candidate = path.expanduser()
+    if candidate.is_absolute():
+        return candidate.resolve()
+    if candidate.exists():
+        return candidate.resolve()
+    return candidate.resolve()
 
 
 def _plan_sync(config: Config, args: argparse.Namespace, progress: ProgressDisplay) -> PlannedSync:
@@ -359,7 +373,11 @@ def _handle_analyze(args: argparse.Namespace, config: Config) -> int:
 
 
 def _handle_config(args: argparse.Namespace) -> int:
-    path = args.config.expanduser().resolve()
+    try:
+        path = _existing_config_path(args.config)
+    except FileNotFoundError as exc:
+        print(f"配置错误: {exc}", file=sys.stderr)
+        return 2
     if args.config_command == "path":
         print(path)
         return 0
@@ -387,6 +405,17 @@ def _handle_config(args: argparse.Namespace) -> int:
     except (OSError, ValueError, tomllib.TOMLDecodeError, ParseError) as exc:
         print(f"配置错误: {exc}", file=sys.stderr)
         return 2
+
+
+def _existing_config_path(path: Path) -> Path:
+    candidate = path.expanduser()
+    if candidate.is_absolute():
+        if candidate.exists():
+            return candidate.resolve()
+        raise FileNotFoundError(candidate)
+    if candidate.exists():
+        return candidate.resolve()
+    raise FileNotFoundError(candidate)
 
 
 def _print_config_checks(checks: list[ConfigCheck]) -> None:
