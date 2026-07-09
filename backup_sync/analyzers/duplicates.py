@@ -131,7 +131,7 @@ class DuplicatesAnalyzer(Analyzer):
             paths = tuple(explicit_paths or ())
         scope = getattr(args, "scope", None)
         if explicit_paths:
-            snapshots = [
+            explicit_snapshots = [
                 (
                     f"path{index}",
                     self._scan(f"path{index}", path.expanduser().resolve(), (), context),
@@ -140,7 +140,7 @@ class DuplicatesAnalyzer(Analyzer):
             ]
             return [
                 DuplicateEntry(label, snapshot.root, path, info)
-                for label, snapshot in snapshots
+                for label, snapshot in explicit_snapshots
                 for path, info in snapshot.files.items()
             ]
         snapshots: list[tuple[str, Snapshot]] = []

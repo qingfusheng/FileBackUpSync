@@ -85,6 +85,7 @@ class SymlinksAnalyzer(Analyzer):
         context: AnalyzeContext,
         args: argparse.Namespace,
     ) -> list[SymlinkEntry]:
+        roots: list[tuple[str, Path, tuple[str, ...]]]
         explicit_paths = getattr(args, "path", None)
         if explicit_paths:
             paths = (explicit_paths,) if isinstance(explicit_paths, Path) else tuple(explicit_paths)
